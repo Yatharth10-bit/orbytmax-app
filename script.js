@@ -205,17 +205,16 @@ function buildStarfield() {
 
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
   starGeo.setAttribute('size', new THREE.BufferAttribute(starSizes, 1));
-  starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+  starGeo.setAttribute('aColor', new THREE.BufferAttribute(starColors, 3));
 
   const starMat = new THREE.ShaderMaterial({
     vertexShader: `
       attribute float size;
-      attribute vec3 color;
+      attribute vec3 aColor;
       varying vec3 vColor;
       uniform float time;
       void main() {
-        vColor = color;
-        // Organic per-star twinkle using unique phase from position
+        vColor = aColor;
         float phase = position.x * 2.3 + position.y * 3.7 + position.z * 1.9;
         float twinkle = 0.80 + 0.20 * sin(time * 1.2 + phase);
         vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
@@ -228,10 +227,8 @@ function buildStarfield() {
       void main() {
         vec2 uv = gl_PointCoord - 0.5;
         float d = length(uv);
-        // Soft star with slight diffraction spike
         float core = 1.0 - smoothstep(0.0, 0.25, d);
         float halo = (1.0 - smoothstep(0.25, 0.5, d)) * 0.35;
-        // Cross spike (4-point diffraction)
         float spike = max(
           (1.0 - smoothstep(0.0, 0.08, abs(uv.x))) * (1.0 - smoothstep(0.0, 0.45, abs(uv.y))),
           (1.0 - smoothstep(0.0, 0.08, abs(uv.y))) * (1.0 - smoothstep(0.0, 0.45, abs(uv.x)))
@@ -241,7 +238,7 @@ function buildStarfield() {
       }
     `,
     uniforms: { time: { value: 0 } },
-    transparent: true, vertexColors: true, depthWrite: false, blending: THREE.AdditiveBlending
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
   });
 
   state.starfield = new THREE.Points(starGeo, starMat);
@@ -270,16 +267,16 @@ function buildStarfield() {
     mwColors[i*3+2] = 0.55 + (1-t) * 0.3;
   }
   mwGeo.setAttribute('position', new THREE.BufferAttribute(mwPos, 3));
-  mwGeo.setAttribute('color', new THREE.BufferAttribute(mwColors, 3));
+  mwGeo.setAttribute('aColor', new THREE.BufferAttribute(mwColors, 3));
   mwGeo.setAttribute('size', new THREE.BufferAttribute(mwSizes, 1));
 
   const mwMat = new THREE.ShaderMaterial({
     vertexShader: `
       attribute float size;
-      attribute vec3 color;
+      attribute vec3 aColor;
       varying vec3 vColor;
       void main() {
-        vColor = color;
+        vColor = aColor;
         vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
         gl_PointSize = size * (220.0 / -mvPos.z);
         gl_Position = projectionMatrix * mvPos;
@@ -294,7 +291,7 @@ function buildStarfield() {
       }
     `,
     uniforms: {},
-    transparent: true, vertexColors: true, depthWrite: false, blending: THREE.AdditiveBlending
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
   });
   const mwPoints = new THREE.Points(mwGeo, mwMat);
   state.scene.add(mwPoints);
@@ -472,17 +469,16 @@ function buildAsteroidBelt() {
 
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
 
   const mat = new THREE.ShaderMaterial({
     vertexShader: `
       attribute float size;
-      attribute vec3 color;
+      attribute vec3 aColor;
       varying vec3 vColor;
       uniform float time;
       void main() {
-        vColor = color;
-        // Slow orbital drift
+        vColor = aColor;
         float angle = atan(position.z, position.x) + time * 0.012;
         float r = length(vec2(position.x, position.z));
         vec3 rotated = vec3(cos(angle)*r, position.y, sin(angle)*r);
@@ -495,13 +491,12 @@ function buildAsteroidBelt() {
       varying vec3 vColor;
       void main() {
         float d = length(gl_PointCoord - 0.5);
-        // Irregular rocky shape via noise-ish edge
         float alpha = 1.0 - smoothstep(0.28, 0.5, d);
         gl_FragColor = vec4(vColor, alpha * 0.7);
       }
     `,
     uniforms: { time: { value: 0 } },
-    transparent: true, vertexColors: true, depthWrite: false, blending: THREE.NormalBlending
+    transparent: true, depthWrite: false, blending: THREE.NormalBlending
   });
 
   state.asteroidBelt = new THREE.Points(geo, mat);
@@ -806,6 +801,20 @@ function parseTLEs(rawText) {
   return sats;
 }
 
+function getSpriteMaterial(cat) {
+  if (!state.spriteMaterialCache) state.spriteMaterialCache = {};
+  if (!state.spriteMaterialCache[cat]) {
+    const tex = getSpriteTexture(cat);
+    state.spriteMaterialCache[cat] = new THREE.SpriteMaterial({
+      map: tex,
+      depthTest: false,
+      transparent: true,
+      blending: THREE.AdditiveBlending
+    });
+  }
+  return state.spriteMaterialCache[cat];
+}
+
 function buildSatelliteSprites() {
   // Remove old
   state.sprites.forEach(s => state.scene.remove(s));
@@ -816,15 +825,10 @@ function buildSatelliteSprites() {
   const filtered = getFilteredSats();
 
   filtered.forEach((sat, idx) => {
-    const tex = getSpriteTexture(sat.cat);
-    const mat = new THREE.SpriteMaterial({
-      map: tex,
-      depthTest: false,
-      transparent: true,
-      blending: THREE.AdditiveBlending
-    });
+    // Clone the shared material so per-sprite opacity/color overrides don't bleed
+    const mat = getSpriteMaterial(sat.cat).clone();
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(0.042, 0.042, 1);   // was 0.025 — bigger default size
+    sprite.scale.set(0.042, 0.042, 1);
     sprite.userData = { satIdx: idx, satName: sat.name, sat };
     state.scene.add(sprite);
     state.sprites.push(sprite);
@@ -834,13 +838,13 @@ function buildSatelliteSprites() {
     if (orbitPts.length > 2) {
       const geo = new THREE.BufferGeometry().setFromPoints(orbitPts);
       const color = getCategoryColor(sat.cat);
-      const mat = new THREE.LineBasicMaterial({
+      const lineMat = new THREE.LineBasicMaterial({
         color,
         transparent: true,
         opacity: 0.12,
         depthWrite: false
       });
-      const line = new THREE.Line(geo, mat);
+      const line = new THREE.Line(geo, lineMat);
       line.visible = state.showOrbits;
       state.scene.add(line);
       state.orbitLines.push(line);
@@ -922,10 +926,11 @@ function selectSatellite(listIdx) {
   if (!sat) return;
 
   // Highlight sprite
+  const filtered2 = getFilteredSats();
   state.sprites.forEach((s, i) => {
     if (!s) return;
     s.material.opacity = i === listIdx ? 1.0 : 0.55;
-    s.material.color.set(i === listIdx ? 0xffffff : getCategoryColor(sat.cat));
+    s.material.color.set(i === listIdx ? 0xffffff : getCategoryColor(filtered2[i]?.cat || 'other'));
   });
 
   // Panel data
@@ -1451,6 +1456,7 @@ function initControls() {
       btn.classList.add('active');
       state.activeFilter = btn.dataset.filter;
       state.selectedIndex = -1;
+      state.spriteMaterialCache = {};
       document.getElementById('infoPanel').classList.remove('open');
       buildSatelliteSprites();
     });
