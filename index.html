@@ -34,6 +34,14 @@
         <span class="count" id="satCount">0</span>
         <span class="label">OBJECTS</span>
       </div>
+      <button class="header-icon-btn" id="btnBookmarks" title="My Bookmarks">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+        <span class="header-btn-label">SAVED</span>
+      </button>
+      <button class="header-icon-btn isro-btn" id="btnISRO" title="ISRO India Panel">
+        <span style="font-size:15px">🇮🇳</span>
+        <span class="header-btn-label">ISRO</span>
+      </button>
     </div>
   </header>
 
@@ -391,9 +399,109 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!--  PASS PREDICTOR PANEL                              -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="feature-panel pass-panel" id="passPanel">
+    <div class="fp-header">
+      <div class="fp-title-wrap">
+        <span class="fp-icon">📡</span>
+        <div>
+          <div class="fp-title">PASS PREDICTOR</div>
+          <div class="fp-sub" id="passSatName">Select a satellite</div>
+        </div>
+      </div>
+      <button class="fp-close" id="passClose">✕</button>
+    </div>
+
+    <div class="fp-body">
+      <div class="pass-sat-badge" id="passSatCat">—</div>
+
+      <!-- Location -->
+      <div class="pass-section-label">YOUR LOCATION</div>
+      <button class="pass-loc-btn" id="passLocBtn">📍 USE MY LOCATION (GPS)</button>
+
+      <!-- Quick India cities -->
+      <div class="pass-cities">
+        <button class="pass-city-btn" data-lat="28.6139" data-lon="77.2090">🏙 Delhi</button>
+        <button class="pass-city-btn" data-lat="19.0760" data-lon="72.8777">🏙 Mumbai</button>
+        <button class="pass-city-btn" data-lat="12.9716" data-lon="77.5946">🏙 Bengaluru</button>
+        <button class="pass-city-btn" data-lat="22.5726" data-lon="88.3639">🏙 Kolkata</button>
+        <button class="pass-city-btn" data-lat="13.0827" data-lon="80.2707">🏙 Chennai</button>
+        <button class="pass-city-btn" data-lat="17.3850" data-lon="78.4867">🏙 Hyderabad</button>
+        <button class="pass-city-btn" data-lat="23.0225" data-lon="72.5714">🏙 Ahmedabad</button>
+        <button class="pass-city-btn" data-lat="26.9124" data-lon="75.7873">🏙 Jaipur</button>
+      </div>
+
+      <!-- Manual input -->
+      <div class="pass-manual">
+        <input type="number" id="passManualLat" placeholder="Latitude (-90 to 90)" step="0.01" min="-90" max="90"/>
+        <input type="number" id="passManualLon" placeholder="Longitude (-180 to 180)" step="0.01" min="-180" max="180"/>
+        <button class="pass-manual-btn" id="passManualBtn">COMPUTE</button>
+      </div>
+
+      <div class="pass-location-label" id="passLocationLabel">No location set</div>
+
+      <!-- Results -->
+      <div class="pass-section-label">UPCOMING PASSES (48h)</div>
+      <div class="pass-results" id="passResults">
+        <div class="pass-hint">Open this panel from any satellite's info card by clicking PASSES.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!--  BOOKMARKS PANEL                                   -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="feature-panel bookmarks-panel" id="bookmarksPanel">
+    <div class="fp-header">
+      <div class="fp-title-wrap">
+        <span class="fp-icon">⭐</span>
+        <div>
+          <div class="fp-title">MY BOOKMARKS</div>
+          <div class="fp-sub">Saved satellites</div>
+        </div>
+      </div>
+      <button class="fp-close" id="bookmarksClose">✕</button>
+    </div>
+    <div class="fp-body">
+      <div class="bm-hint">Bookmark any satellite by clicking <strong>SAVE</strong> in its info panel. Bookmarks are saved in your browser.</div>
+      <div id="bookmarksList"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!--  ISRO INDIA PANEL                                  -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="feature-panel isro-panel" id="isroPanel">
+    <div class="fp-header isro-header">
+      <div class="fp-title-wrap">
+        <span class="fp-icon">🇮🇳</span>
+        <div>
+          <div class="fp-title">ISRO INDIA</div>
+          <div class="fp-sub">Missions · Launches · Stats</div>
+        </div>
+      </div>
+      <button class="fp-close" id="isroClose">✕</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="isro-tabs">
+      <button class="isro-tab active" data-tab="missions">🚀 MISSIONS</button>
+      <button class="isro-tab" data-tab="launches">📅 UPCOMING</button>
+      <button class="isro-tab" data-tab="stats">📊 STATS</button>
+    </div>
+
+    <div class="fp-body isro-body">
+      <div class="isro-tab-content active" id="isroTab_missions"></div>
+      <div class="isro-tab-content" id="isroTab_launches"></div>
+      <div class="isro-tab-content" id="isroTab_stats"></div>
+    </div>
+  </div>
+
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.0.0/dist/satellite.min.js"></script>
-  <script src="script.js?v=5"></script>
+  <script src="script.js?v=6"></script>
 </body>
 </html>
