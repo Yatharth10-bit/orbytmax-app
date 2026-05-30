@@ -520,7 +520,7 @@ body { font-family: var(--font-mono); }
   transition: opacity 0.9s cubic-bezier(0.4,0,0.2,1), visibility 0.9s;
   overflow: hidden;
 }
-.loading-overlay.hidden { opacity: 0; visibility: hidden; }
+.loading-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 
 /* Starfield canvas behind content */
 .preloader-canvas {
@@ -1378,6 +1378,7 @@ body { font-family: var(--font-mono); }
 .feature-panel.open {
   opacity: 1; pointer-events: all;
   transform: translateY(0) scale(1);
+  z-index: 450;
 }
 
 .pass-panel      { right: 20px; }
@@ -1579,8 +1580,14 @@ body { font-family: var(--font-mono); }
 .isro-tab:hover { color: #ff9933; }
 .isro-tab.active { color: #ff9933; border-bottom-color: #ff9933; background: rgba(255,153,51,0.05); }
 
-.isro-body { padding: 12px 14px; }
-.isro-tab-content { display: none; }
+.isro-body {
+  padding: 12px 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.isro-tab-content { display: none; min-height: 80px; }
 .isro-tab-content.active { display: block; }
 
 .isro-mission-card {
@@ -1654,11 +1661,40 @@ body { font-family: var(--font-mono); }
   margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--border);
 }
 .isro-live-item {
-  font-size: 10px; color: var(--text-dim); padding: 7px 0;
-  border-bottom: 1px solid var(--border); cursor: pointer; transition: color 0.13s;
-  letter-spacing: 0.03em;
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+  padding: 7px 0; border-bottom: 1px solid var(--border); cursor: pointer;
+  transition: color 0.13s; letter-spacing: 0.03em;
 }
 .isro-live-item:hover { color: var(--accent); }
+.isro-launch-status {
+  font-size: 7px; letter-spacing: 0.12em; padding: 3px 6px; border-radius: 3px;
+  background: rgba(255,153,51,0.12); color: #ff9933; flex-shrink: 0;
+}
+.isro-news-card {
+  display: block; padding: 10px 12px; margin-bottom: 8px; border-radius: 8px;
+  border: 1px solid rgba(255,153,51,0.15); background: rgba(255,153,51,0.03);
+  text-decoration: none; color: inherit; transition: background 0.15s;
+}
+.isro-news-card:hover { background: rgba(255,153,51,0.08); }
+.isro-news-title { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.isro-news-meta { font-size: 8px; color: var(--text-faint); margin-bottom: 6px; }
+.isro-news-summary { font-size: 9px; color: var(--text-dim); line-height: 1.5; }
+.isro-news-loading, .isro-news-empty, .isro-news-updated {
+  font-size: 10px; color: var(--text-faint); padding: 8px 0;
+}
+.copilot-context-badge {
+  font-size: 9px; letter-spacing: 0.06em; color: var(--accent-2);
+  padding: 6px 14px; border-bottom: 1px solid var(--border);
+  background: rgba(0,255,157,0.04);
+}
+.copilot-followups { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.copilot-chip-sm { font-size: 9px !important; padding: 4px 8px !important; }
+.copilot-retry-btn {
+  margin-top: 8px; padding: 5px 10px; font-size: 10px; cursor: pointer;
+  background: rgba(0,200,255,0.12); border: 1px solid var(--border-bright);
+  color: var(--accent); border-radius: 4px; font-family: var(--font-mono);
+}
 
 /* ═══════════════════════════════════════════════════════════
    MOBILE — hide feature panels behind bottom nav
