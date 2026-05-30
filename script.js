@@ -13,6 +13,20 @@ const EARTH_RADIUS_3D = 1.0;     // Three.js units
 const SCALE = EARTH_RADIUS_3D / EARTH_RADIUS;
 const TLES_URL = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle';
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+const TLE_CACHE_KEY = 'orbital_tle_cache';
+const TLE_CACHE_TS_KEY = 'orbital_tle_cache_ts';
+const TLE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const DOM_UPDATE_INTERVAL_MS = 250;
+const IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
+const TLE_FETCH_TIMEOUT_MS = 6000;
+const TLE_LOAD_HARD_CAP_MS = 4500;
+const TLE_MAX_PARSE = IS_MOBILE ? 1200 : 2500;
+const TLE_MAX_RENDER = IS_MOBILE ? 600 : 1500;
+const TLE_RETRY_ATTEMPTS = 3;
+
+function devLog(...args) {
+  if (window.ORBITAL_CONFIG?.DEV) console.log('[ORBITAL]', ...args);
+}
 
 // ============================================================
 // STATE
@@ -35,7 +49,10 @@ const state = {
   spriteTextureCache: {},
   animFrameId: null,
   tleLoaded: false,
-  lastListItems: []
+  lastListItems: [],
+  lastDOMUpdate: 0,
+  isTabVisible: true,
+  cameraFly: null
 };
 
 // ============================================================
@@ -50,13 +67,17 @@ function getSatCategory(name) {
   if (n.includes('GLONASS') || n.includes('GALILEO') || n.includes('BEIDOU') || n.includes('COMPASS')) return 'gnss';
   if (n.includes('HUBBLE') || n.includes('CHANDRA') || n.includes('KEPLER') || n.includes('SPITZER')) return 'science';
   if (n.includes('IRIDIUM') || n.includes('ORBCOMM') || n.includes('INTELSAT') || n.includes('SES-') || n.includes('TELSTAR')) return 'comm';
+  if (n.includes('CARTOSAT') || n.includes('RISAT') || n.includes('RESOURCESAT') || n.includes('GSAT') ||
+      n.includes('IRNSS') || n.includes('NAVIC') || n.includes('INSAT') || n.includes('OCEANSAT') ||
+      n.includes('EMISAT') || n.includes('MICROSAT') || n.includes('SARAL') || n.includes('ASTROSAT') ||
+      n.includes('XPOSAT') || n.includes('EOS-') || n.includes('HYSIS')) return 'isro';
   return 'other';
 }
 
 function getCategoryEmoji(cat) {
   const map = {
     iss: '🛸', starlink: '🛰️', gps: '📡', weather: '🌤️',
-    gnss: '🗺️', science: '🔭', comm: '📺', other: '⬡'
+    gnss: '🗺️', science: '🔭', comm: '📺', isro: '🇮🇳', other: '⬡'
   };
   return map[cat] || '⬡';
 }
@@ -65,7 +86,7 @@ function getCategoryColor(cat) {
   const map = {
     iss: 0xffd700, starlink: 0x00c8ff, gps: 0x00ff9d,
     weather: 0xff8c42, gnss: 0x9b59b6, science: 0xff6b6b,
-    comm: 0x4ecdc4, other: 0x95a5a6
+    comm: 0x4ecdc4, isro: 0xff9933, other: 0x95a5a6
   };
   return map[cat] || 0x95a5a6;
 }
@@ -140,7 +161,8 @@ function initThree() {
 
   state.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   state.renderer.setSize(window.innerWidth, window.innerHeight);
-  state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const maxDpr = IS_MOBILE ? 1.5 : 2;
+  state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDpr));
   state.renderer.outputEncoding = THREE.sRGBEncoding;
 
   state.clock = new THREE.Clock();
@@ -513,7 +535,8 @@ function buildEarth() {
   const tLoader = new THREE.TextureLoader();
 
   // Earth sphere
-  const geo = new THREE.SphereGeometry(EARTH_RADIUS_3D, 128, 128);
+  const earthSegments = IS_MOBILE ? 64 : 128;
+  const geo = new THREE.SphereGeometry(EARTH_RADIUS_3D, earthSegments, earthSegments);
 
   // Load real NASA Blue Marble texture via CDN proxy
   const earthTex = tLoader.load(
@@ -827,8 +850,12 @@ function buildSatelliteSprites() {
   state.orbitLines = [];
 
   const filtered = getFilteredSats();
+  const renderList = filtered.slice(0, TLE_MAX_RENDER);
+  if (filtered.length > renderList.length) {
+    devLog(`Render cap ${renderList.length}/${filtered.length}`);
+  }
 
-  filtered.forEach((sat, idx) => {
+  renderList.forEach((sat, idx) => {
     // Clone the shared material so per-sprite opacity/color overrides don't bleed
     const mat = getSpriteMaterial(sat.cat).clone();
     const sprite = new THREE.Sprite(mat);
@@ -858,6 +885,49 @@ function buildSatelliteSprites() {
   });
 
   buildSatList(filtered);
+}
+
+function getIsroSatellites() {
+  return state.satellites.filter(s => s.cat === 'isro' || isIsroSatName(s.name));
+}
+
+function isIsroSatName(name) {
+  const n = name.toUpperCase();
+  return n.includes('CARTOSAT') || n.includes('RISAT') || n.includes('RESOURCESAT') ||
+    n.includes('GSAT') || n.includes('IRNSS') || n.includes('INSAT') || n.includes('OCEANSAT') ||
+    n.includes('EMISAT') || n.includes('SARAL') || n.includes('ASTROSAT') || n.includes('XPOSAT');
+}
+
+function trackSatelliteByNorad(norad, missionName) {
+  if (!norad) {
+    showToast('No NORAD ID for this mission');
+    return;
+  }
+  const noradStr = String(norad);
+  const exists = state.satellites.some(s => s.norad === noradStr);
+  if (!exists) {
+    showToast('Satellite not available in current TLE data');
+    const input = document.getElementById('searchInput');
+    if (input && missionName) {
+      input.value = missionName.replace(/\(.*\)/, '').trim().split(' ')[0];
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+    }
+    return;
+  }
+  if (state.activeFilter !== 'all') {
+    state.activeFilter = 'all';
+    document.querySelectorAll('.filter-btn, .mob-filter-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.filter === 'all');
+    });
+    buildSatelliteSprites();
+  }
+  const idx = getFilteredSats().findIndex(s => s.norad === noradStr);
+  if (idx >= 0) {
+    document.getElementById('isroPanel')?.classList.remove('open');
+    selectSatellite(idx);
+    flyCameraToSatellite(idx, 2000);
+  }
 }
 
 function getFilteredSats() {
@@ -981,6 +1051,7 @@ function selectSatellite(listIdx) {
 
   document.getElementById('infoPanel').classList.add('open');
   drawMiniMap(sat);
+  window.OrbitalCopilot?.updateContextBadge?.();
 
   // Wire up action buttons
   document.getElementById('panelBookmarkBtn').addEventListener('click', (e) => {
@@ -1017,15 +1088,52 @@ function deselectSatellite() {
 }
 
 // Fix 5: Auto-select ISS on first load so the panel isn't empty
+function flyCameraToSatellite(listIdx, durationMs = 2000) {
+  const filtered = getFilteredSats();
+  const sat = filtered[listIdx];
+  if (!sat) return;
+  const geo = sat._lastGeo || propagateToGeodetic(sat.satrec, new Date());
+  if (!geo) return;
+
+  const targetPos = geoTo3D(geo.lat, geo.lon, geo.alt);
+  const offset = targetPos.clone().normalize().multiplyScalar(0.55);
+  const endCam = targetPos.clone().add(offset);
+
+  state.cameraFly = {
+    startTime: performance.now(),
+    duration: durationMs,
+    startPos: state.camera.position.clone(),
+    endPos: endCam,
+    startTarget: state.orbitControls.target.clone(),
+    endTarget: targetPos.clone()
+  };
+  state.orbitControls.autoRotate = false;
+}
+
+function updateCameraFly() {
+  if (!state.cameraFly) return false;
+  const t = Math.min(1, (performance.now() - state.cameraFly.startTime) / state.cameraFly.duration);
+  const ease = t * t * (3 - 2 * t);
+  state.camera.position.lerpVectors(state.cameraFly.startPos, state.cameraFly.endPos, ease);
+  state.orbitControls.target.lerpVectors(state.cameraFly.startTarget, state.cameraFly.endTarget, ease);
+  state.orbitControls.spherical.setFromVector3(
+    state.camera.position.clone().sub(state.orbitControls.target)
+  );
+  state.camera.lookAt(state.orbitControls.target);
+  if (t >= 1) state.cameraFly = null;
+  return !!state.cameraFly;
+}
+
 function autoSelectISS() {
   const filtered = getFilteredSats();
-  // Find ISS by name (case-insensitive, partial match)
   const issIdx = filtered.findIndex(s =>
     s.name.toUpperCase().includes('ISS') || s.name.toUpperCase().includes('ZARYA')
   );
   if (issIdx >= 0) {
-    // Small delay so sprites are positioned before we open the panel
-    setTimeout(() => selectSatellite(issIdx), 400);
+    setTimeout(() => {
+      selectSatellite(issIdx);
+      flyCameraToSatellite(issIdx, 2000);
+    }, 400);
   }
 }
 
@@ -1161,8 +1269,10 @@ function updateFollowMode() {
 // ============================================================
 function animate() {
   state.animFrameId = requestAnimationFrame(animate);
+  if (!state.isTabVisible) return;
 
   const elapsed = state.clock.getElapsedTime();
+  const nowMs = performance.now();
 
   // Stars twinkle
   if (state.starfield) state.starfield.material.uniforms.time.value = elapsed;
@@ -1175,15 +1285,17 @@ function animate() {
   if (state.atmo) state.atmo.rotation.y = elapsed * 0.0003;
 
   // Update controls or follow
-  if (state.followMode) updateFollowMode();
+  if (state.cameraFly) updateCameraFly();
+  else if (state.followMode) updateFollowMode();
   else updateOrbitControls();
 
   // Update satellite positions (every frame is fine for <2000 sats)
   if (state.tleLoaded) {
     updateSatellitePositions();
 
-    // Update info panel live if open
-    if (state.selectedIndex >= 0) {
+    // Throttle DOM updates — avoid 60fps textContent writes
+    if (state.selectedIndex >= 0 && nowMs - state.lastDOMUpdate >= DOM_UPDATE_INTERVAL_MS) {
+      state.lastDOMUpdate = nowMs;
       const filtered = getFilteredSats();
       const sat = filtered[state.selectedIndex];
       if (sat && sat._lastGeo) {
@@ -1192,34 +1304,95 @@ function animate() {
         document.getElementById('dAlt').textContent = `${Math.round(sat._lastGeo.alt).toLocaleString()} km`;
         document.getElementById('dVel').textContent = `${sat._lastGeo.vel.toFixed(2)} km/s`;
 
-        // Mini map refresh (every 60 frames)
-        if (Math.round(elapsed * 60) % 60 === 0) drawMiniMap(sat);
+        // Mini map refresh (~every 4 DOM ticks)
+        if (Math.round(nowMs / DOM_UPDATE_INTERVAL_MS) % 4 === 0) drawMiniMap(sat);
       }
     }
   }
 
-  // UTC clock
-  const now = new Date();
-  document.getElementById('utcTime').textContent = `UTC ${now.toUTCString().slice(17,25)}`;
+  // UTC clock (once per second is enough)
+  if (Math.floor(elapsed) !== state._lastUtcSec) {
+    state._lastUtcSec = Math.floor(elapsed);
+    const now = new Date();
+    document.getElementById('utcTime').textContent = `UTC ${now.toUTCString().slice(17, 25)}`;
+  }
 
   state.renderer.render(state.scene, state.camera);
 }
 
 // ============================================================
-// FETCH TLE DATA  — Fix 1: Reliable multi-proxy parallel fetch
+// FETCH TLE DATA — fast bundled path + background live refresh
 // ============================================================
 
-// Multiple CORS proxy options — raced in parallel so fastest wins
+const CELESTRAK_ACTIVE = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle';
 const TLE_SOURCES = [
-  // Proxy 1: allorigins (most common, sometimes flaky)
-  `https://api.allorigins.win/raw?url=${encodeURIComponent('https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle')}`,
-  // Proxy 2: corsproxy.io — reliable alternative
-  `https://corsproxy.io/?${encodeURIComponent('https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle')}`,
-  // Proxy 3: direct with no-cors header attempt (works from some origins)
-  `https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle`,
-  // Proxy 4: thingproxy fallback
-  `https://thingproxy.freeboard.io/fetch/https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle`,
+  `https://corsproxy.io/?${encodeURIComponent(CELESTRAK_ACTIVE)}`,
+  `https://api.allorigins.win/raw?url=${encodeURIComponent(CELESTRAK_ACTIVE)}`,
+  CELESTRAK_ACTIVE
 ];
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function setConnectionStatus(mode, count, extra) {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  dot?.classList.remove('live', 'error');
+  if (mode === 'live') {
+    dot?.classList.add('live');
+    txt.textContent = `LIVE — ${count.toLocaleString()} OBJECTS`;
+  } else if (mode === 'cached') {
+    dot?.classList.add('live');
+    txt.textContent = extra || `CACHED — ${count.toLocaleString()} OBJECTS`;
+  } else if (mode === 'offline') {
+    dot?.classList.add('live');
+    txt.textContent = `OFFLINE — ${count.toLocaleString()} OBJECTS`;
+  } else if (mode === 'error') {
+    dot?.classList.add('error');
+    txt.textContent = extra || 'DATA ERROR';
+  } else {
+    txt.textContent = 'CONNECTING…';
+  }
+}
+
+function hideLoadingOverlay() {
+  document.getElementById('loadingOverlay')?.classList.add('hidden');
+}
+
+function trimTleRaw(raw, maxSats) {
+  const lines = raw.split('\n');
+  const out = [];
+  let count = 0;
+  for (let i = 0; i < lines.length - 2 && count < maxSats; i++) {
+    const n = lines[i]?.trim();
+    const l1 = lines[i + 1]?.trim();
+    const l2 = lines[i + 2]?.trim();
+    if (l1?.startsWith('1 ') && l2?.startsWith('2 ')) {
+      out.push(n, l1, l2);
+      count++;
+      i += 2;
+    }
+  }
+  return out.join('\n') + '\n';
+}
+
+function cacheTleRaw(raw) {
+  if (!raw || raw.length < 5000 || raw.length > 1_500_000) return;
+  try {
+    localStorage.setItem(TLE_CACHE_KEY, raw);
+    localStorage.setItem(TLE_CACHE_TS_KEY, String(Date.now()));
+  } catch (e) { devLog('cache write failed', e); }
+}
+
+function readTleCache() {
+  try {
+    const ts = parseInt(localStorage.getItem(TLE_CACHE_TS_KEY) || '0', 10);
+    const cached = localStorage.getItem(TLE_CACHE_KEY);
+    if (cached && Date.now() - ts < TLE_CACHE_TTL_MS && cached.includes('\n1 ')) return cached;
+  } catch (e) { /* private mode */ }
+  return null;
+}
 
 async function tryFetchTLE(url, timeoutMs) {
   const ctrl = new AbortController();
@@ -1229,7 +1402,6 @@ async function tryFetchTLE(url, timeoutMs) {
     clearTimeout(timer);
     if (!res.ok) return null;
     const text = await res.text();
-    // Valid TLE file always has lines starting with "1 " and "2 "
     return (text.includes('\n1 ') && text.includes('\n2 ')) ? text : null;
   } catch (e) {
     clearTimeout(timer);
@@ -1237,71 +1409,135 @@ async function tryFetchTLE(url, timeoutMs) {
   }
 }
 
-async function fetchTLEs() {
-  setLoading('Fetching satellite TLE data...', 15);
+async function fetchLiveTleWithRetry() {
+  for (let attempt = 0; attempt < TLE_RETRY_ATTEMPTS; attempt++) {
+    const timeout = TLE_FETCH_TIMEOUT_MS + attempt * 2000;
+    devLog(`Live TLE attempt ${attempt + 1}/${TLE_RETRY_ATTEMPTS}`);
+    setLoading(`Fetching live data (try ${attempt + 1})…`, 40 + attempt * 10);
+    const results = await Promise.all(
+      TLE_SOURCES.map(url => tryFetchTLE(url, timeout))
+    );
+    const winner = results.find(Boolean);
+    if (winner) return winner;
+    if (attempt < TLE_RETRY_ATTEMPTS - 1) {
+      await sleep(800 * Math.pow(2, attempt));
+    }
+  }
+  return null;
+}
 
-  let raw = null;
-
-  // Phase 1: Try to load a checked-in local copy first — fastest possible, no network needed
+async function loadBundledTle() {
   try {
-    const res = await fetch('./data/active.txt', { signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined });
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 1800);
+    const res = await fetch('./data/active.txt', { signal: ctrl.signal });
     if (res.ok) {
       const text = await res.text();
-      if (text.includes('\n1 ') && text.length > 5000) {
-        raw = text;
-        showToast('TLE data loaded from local cache');
-      }
+      if (text.includes('\n1 ') && text.length > 500) return text;
     }
-  } catch (e) { /* no local file — fine */ }
+  } catch (e) { devLog('active.txt unavailable', e.message); }
+  return getSampleTLEs();
+}
 
-  // Phase 2: Race all proxies simultaneously — whoever responds first with valid data wins
-  if (!raw) {
-    setLoading('Fetching live TLE data...', 25);
-    try {
-      // Promise.any resolves as soon as ONE resolves with non-null value
-      const winner = await Promise.any(
-        TLE_SOURCES.map(url => tryFetchTLE(url, 8000).then(r => {
-          if (!r) throw new Error('empty'); return r;
-        }))
-      );
-      if (winner) {
-        raw = winner;
-      }
-    } catch (e) {
-      // All proxies failed — use embedded fallback
-    }
-  }
-
-  // Phase 3: Embedded high-quality fallback — 60 real satellites covering all categories
-  if (!raw || raw.length < 500) {
-    raw = getSampleTLEs();
-    document.getElementById('statusText').textContent = 'OFFLINE — Sample data';
-    showToast('Network unavailable — showing 60 built-in satellites');
-  }
-
-  setLoading('Parsing satellite data...', 55);
-  state.satellites = parseTLEs(raw);
+function applyTleRaw(raw, sourceMeta = {}) {
+  const { source = 'unknown', silent = false, skipIss = false } = sourceMeta;
+  const trimmed = trimTleRaw(raw, TLE_MAX_PARSE);
+  setLoading('Parsing satellite data…', 70);
+  state.satellites = parseTLEs(trimmed);
   document.getElementById('satCount').textContent = state.satellites.length.toLocaleString();
   document.getElementById('listCount').textContent = state.satellites.length.toLocaleString();
-
-  setLoading('Building 3D scene...', 78);
+  setLoading('Building 3D scene…', 88);
   buildSatelliteSprites();
+  state.tleLoaded = true;
+  state.dataSource = source;
+
+  if (source === 'live') setConnectionStatus('live', state.satellites.length);
+  else if (source === 'cache') setConnectionStatus('cached', state.satellites.length, `CACHED — ${state.satellites.length.toLocaleString()} OBJECTS`);
+  else setConnectionStatus('offline', state.satellites.length, `BUNDLED — ${state.satellites.length.toLocaleString()} OBJECTS`);
 
   setLoading('Ready!', 100);
-  state.tleLoaded = true;
+  hideLoadingOverlay();
 
-  document.getElementById('statusDot').classList.add('live');
-  if (!document.getElementById('statusText').textContent.includes('OFFLINE')) {
-    document.getElementById('statusText').textContent = `LIVE — ${state.satellites.length.toLocaleString()} OBJECTS`;
+  if (!silent) {
+    const msg = source === 'live'
+      ? `Tracking ${state.satellites.length.toLocaleString()} satellites (live)`
+      : source === 'cache'
+        ? 'Using cached satellite data'
+        : 'Using bundled satellite data (offline mode)';
+    showToast(msg);
+    if (!skipIss) autoSelectISS();
   }
 
-  setTimeout(() => {
-    document.getElementById('loadingOverlay').classList.add('hidden');
-    // Fix 5: Auto-select ISS after satellites are loaded
-    autoSelectISS();
-  }, 380);
+  // ISRO stats tab may need refresh when data arrives
+  document.getElementById('isroTab_stats')?.removeAttribute('data-rendered');
+  devLog('Applied TLE', source, state.satellites.length);
+}
 
-  showToast(`Tracking ${state.satellites.length.toLocaleString()} satellites`);
+async function fetchTLEs(options = {}) {
+  const { forceRefresh = false, background = false } = options;
+  state.tleFetchGen = (state.tleFetchGen || 0) + 1;
+  const myGen = state.tleFetchGen;
+
+  if (!background) {
+    setLoading('Loading satellite catalog…', 12);
+    setConnectionStatus('connecting');
+  }
+
+  let hardTimer;
+  const hardCap = new Promise(resolve => {
+    hardTimer = setTimeout(() => resolve('timeout'), TLE_LOAD_HARD_CAP_MS);
+  });
+
+  async function loadPath() {
+    let raw = null;
+    let source = 'bundled';
+
+    if (!forceRefresh) {
+      raw = readTleCache();
+      if (raw) source = 'cache';
+    }
+
+    if (!raw) {
+      raw = await loadBundledTle();
+      source = 'bundled';
+    }
+
+    if (myGen !== state.tleFetchGen) return;
+    applyTleRaw(raw, { source, silent: background, skipIss: background });
+
+    if (forceRefresh || background) {
+      const live = await fetchLiveTleWithRetry();
+      if (live && myGen === state.tleFetchGen) {
+        cacheTleRaw(live);
+        applyTleRaw(live, { source: 'live', silent: !forceRefresh, skipIss: background });
+      } else if (forceRefresh && myGen === state.tleFetchGen) {
+        showToast('Live refresh failed — keeping current data');
+      }
+    } else {
+      fetchLiveTleWithRetry().then(live => {
+        if (!live || myGen !== state.tleFetchGen) return;
+        cacheTleRaw(live);
+        applyTleRaw(live, { source: 'live', silent: true, skipIss: true });
+        showToast('Live satellite data updated');
+      }).catch(() => {});
+    }
+  }
+
+  try {
+    await Promise.race([loadPath(), hardCap]);
+    if (!state.tleLoaded && myGen === state.tleFetchGen) {
+      devLog('Hard cap hit — forcing bundled TLE');
+      applyTleRaw(getSampleTLEs(), { source: 'bundled' });
+    }
+  } catch (err) {
+    devLog('fetchTLEs error', err);
+    if (!state.tleLoaded) applyTleRaw(getSampleTLEs(), { source: 'bundled' });
+    setConnectionStatus('error', 0, 'USING FALLBACK DATA');
+  } finally {
+    clearTimeout(hardTimer);
+    hideLoadingOverlay();
+    if (!state.tleLoaded) state.tleLoaded = true;
+  }
 }
 
 // ============================================================
@@ -1653,10 +1889,10 @@ function initControls() {
   });
 
   document.getElementById('btnRefresh').addEventListener('click', async () => {
-    showToast('Refreshing TLE data...');
-    document.getElementById('loadingOverlay').classList.remove('hidden');
+    showToast('Refreshing TLE data…');
+    document.getElementById('loadingOverlay')?.classList.remove('hidden');
     state.tleLoaded = false;
-    await fetchTLEs();
+    await fetchTLEs({ forceRefresh: true });
   });
 
   document.getElementById('closePanel').addEventListener('click', deselectSatellite);
@@ -1698,6 +1934,10 @@ async function init() {
   // Events
   window.addEventListener('resize', onResize);
   window.addEventListener('click', onCanvasClick);
+  document.addEventListener('visibilitychange', () => {
+    state.isTabVisible = !document.hidden;
+    if (state.isTabVisible && state.clock) state.clock.getDelta();
+  });
   initSearch();
   initControls();
 
@@ -1705,283 +1945,98 @@ async function init() {
   setLoading('Starting render loop...', 18);
   animate();
 
-  // Hide the loading overlay early so the user sees the spinning Earth
-  // while satellite data is still being fetched in the background
-  setTimeout(() => {
-    document.getElementById('loadingOverlay').classList.add('hidden');
-  }, 800);
-
-  // Init new feature panels
-  initPassPredictor();
-  initBookmarks();
   initISROPanel();
+  initSpaceCopilot();
 
-  // Fetch TLEs — awaited so autoSelectISS runs after build
+  try { initPassPredictor(); } catch (e) { devLog('Pass predictor init failed', e); }
+  try { initBookmarks(); } catch (e) { devLog('Bookmarks init failed', e); }
+
   await fetchTLEs();
 }
 
 // Start
 init().catch(err => {
-  console.error('Orbital init error:', err);
-  document.getElementById('loadingMsg').textContent = 'Error loading. Check console.';
-  document.getElementById('statusDot').classList.add('error');
+  devLog('init error', err);
+  if (window.ORBITAL_CONFIG?.DEV) console.error('Orbital init error:', err);
+  if (!state.tleLoaded) applyTleRaw(getSampleTLEs(), { source: 'bundled' });
+  hideLoadingOverlay();
 });
 
 // ============================================================
-// AI COPILOT — powered by Anthropic API (no key required)
+// SPACE COPILOT — lazy-loaded xAI chat (js/copilot.js)
 // ============================================================
-const copilot = {
-  open: false,
-  loading: false,
-  messages: []   // { role, content }
-};
+const SYSTEM_PROMPT = `You are Space Copilot, the Satellite Intelligence AI inside ORBITAL — a real-time 3D satellite tracker by Yatharth.
 
-const ANTHROPIC_URL  = 'https://api.anthropic.com/v1/messages';
-const COPILOT_MODEL  = 'claude-sonnet-4-20250514';
+Explain orbits, satellite types, and space missions in simple, engaging language. Use **bold** for key terms. Keep answers under 220 words unless the user needs depth.
 
-const SYSTEM_PROMPT = `You are ORBITAL AI, an expert space and satellite tracking assistant embedded in a real-time satellite tracker application called ORBITAL by Yatharth.
-
-You have deep knowledge of:
-- Orbital mechanics (Kepler's laws, orbital elements, TLE data format, SGP4/SDP4 propagation)
-- Satellite categories: ISS, Starlink, GPS/GNSS constellations, weather satellites, scientific missions
-- Orbit types: LEO (Low Earth Orbit <2000km), MEO (Medium 2000-35000km), GEO (Geostationary ~35786km), HEO (Highly Elliptical)
-- Space debris, Kessler syndrome, orbital decay, reentry
-- Real-world satellite missions, constellations, and their purposes
-
-Keep answers concise, technical but accessible. Use **bold** for key terms. Use bullet points for lists. Keep responses under 220 words unless the question truly demands more. When live satellite context is provided, use it to give specific answers about that satellite.`;
+Rules:
+- Use the LIVE CONTEXT block when a satellite is selected — cite altitude, orbit type, and category from that data.
+- Say "based on currently loaded data" when using live orbital numbers.
+- Do not invent precise pass times unless computed data is provided.
+- For surveillance/spying questions: answer responsibly — most Earth observation satellites have limited resolution; Starlink/GPS are not designed for spying on individuals.
+- Do not dump raw TLE lines unless asked.
+- End with one short follow-up question when helpful.`;
 
 function getCopilotContext() {
   const filtered = getFilteredSats();
   if (state.selectedIndex >= 0 && filtered[state.selectedIndex]) {
     const sat = filtered[state.selectedIndex];
-    const geo = sat._lastGeo;
+    const geo = sat._lastGeo || propagateToGeodetic(sat.satrec, new Date());
+    const periodMin = geo ? (2 * Math.PI / sat.satrec.no).toFixed(1) : '—';
+    const incl = (sat.satrec.inclo * 180 / Math.PI).toFixed(2);
     if (geo) {
-      return `\n\n[LIVE CONTEXT] Selected satellite: ${sat.name} (NORAD #${sat.norad}), Category: ${sat.cat.toUpperCase()}, Orbit: ${getOrbitType(geo.alt)}, Altitude: ${Math.round(geo.alt)} km, Lat: ${geo.lat.toFixed(2)}°, Lon: ${geo.lon.toFixed(2)}°, Velocity: ${geo.vel.toFixed(2)} km/s, Inclination: ${(sat.satrec.inclo * 180 / Math.PI).toFixed(2)}°`;
+      return `\n\n[LIVE CONTEXT] Selected: ${sat.name} | NORAD ${sat.norad} | Type: ${sat.cat.toUpperCase()} | Orbit: ${getOrbitType(geo.alt)} | Alt: ${Math.round(geo.alt)} km | Lat: ${geo.lat.toFixed(2)}° | Lon: ${geo.lon.toFixed(2)}° | Speed: ${geo.vel.toFixed(2)} km/s | Inclination: ${incl}° | Period: ${periodMin} min | Data source: ${state.dataSource || 'unknown'}`;
     }
-    return `\n\n[LIVE CONTEXT] Selected satellite: ${sat.name} (NORAD #${sat.norad}), Category: ${sat.cat.toUpperCase()}`;
+    return `\n\n[LIVE CONTEXT] Selected: ${sat.name} | NORAD ${sat.norad} | Type: ${sat.cat.toUpperCase()}`;
   }
-  return `\n\n[LIVE CONTEXT] Currently tracking ${state.satellites.length.toLocaleString()} satellites. Active filter: ${state.activeFilter}. No satellite selected.`;
+  return `\n\n[LIVE CONTEXT] Tracking ${state.satellites.length} satellites. Filter: ${state.activeFilter}. No satellite selected.`;
 }
 
-function initCopilot() {
-  const fab      = document.getElementById('copilotFab');
-  const closeBtn = document.getElementById('copilotClose');
-  const clearBtn = document.getElementById('copilotClear');
-  const input    = document.getElementById('copilotInput');
-  const sendBtn  = document.getElementById('copilotSend');
-
-  // Hide the API key bar — not needed
-  const keyBar = document.getElementById('copilotKeyBar');
-  if (keyBar) keyBar.classList.add('hidden');
-
-  fab.addEventListener('click', () => toggleCopilot());
-  closeBtn.addEventListener('click', () => toggleCopilot(false));
-
-  clearBtn.addEventListener('click', () => {
-    copilot.messages = [];
-    const msgs = document.getElementById('copilotMessages');
-    msgs.innerHTML = '';
-    const welcome = buildWelcome();
-    if (welcome) msgs.appendChild(welcome);
-  });
-
-  sendBtn.addEventListener('click', sendCopilotMessage);
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCopilotMessage(); }
-  });
-
-  input.addEventListener('input', () => {
-    input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 100) + 'px';
-  });
-
-  document.querySelectorAll('.copilot-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      input.value = chip.dataset.q;
-      sendCopilotMessage();
-    });
-  });
-}
-
-function toggleCopilot(force) {
-  const panel = document.getElementById('copilotPanel');
-  const fab   = document.getElementById('copilotFab');
-  copilot.open = force !== undefined ? force : !copilot.open;
-  panel.classList.toggle('open', copilot.open);
-  fab.classList.toggle('open', copilot.open);
-  if (copilot.open) document.getElementById('copilotInput').focus();
-}
-
-function setStatus(txt) {
-  document.getElementById('copilotStatus').textContent = txt;
-}
-
-function buildWelcome() {
-  const existing = document.querySelector('.copilot-welcome');
-  return existing ? existing.cloneNode(true) : null;
-}
-
-async function sendCopilotMessage() {
-  if (copilot.loading) return;
-  const input = document.getElementById('copilotInput');
-  const text  = input.value.trim();
-  if (!text) return;
-
-  input.value = '';
-  input.style.height = 'auto';
-
-  const welcome = document.querySelector('.copilot-welcome');
-  if (welcome) welcome.style.display = 'none';
-
-  appendMessage('user', text);
-  copilot.messages.push({ role: 'user', content: text });
-
-  const typingEl = appendTyping();
-  copilot.loading = true;
-  document.getElementById('copilotSend').disabled = true;
-  setStatus('Thinking...');
-
-  try {
-    const sysContent = SYSTEM_PROMPT + getCopilotContext();
-
-    const res = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: COPILOT_MODEL,
-        max_tokens: 600,
-        system: sysContent,
-        stream: true,
-        messages: copilot.messages.slice(-14)
-      })
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
+function getCopilotHooks() {
+  return {
+    getContext: getCopilotContext,
+    getSystemPrompt: () => SYSTEM_PROMPT,
+    getSelectedLabel: () => {
+      const f = getFilteredSats();
+      return state.selectedIndex >= 0 && f[state.selectedIndex] ? f[state.selectedIndex].name : null;
     }
+  };
+}
 
-    typingEl.remove();
-    const { bubble } = appendMessage('ai', '');
-    bubble.innerHTML = '<span class="copilot-cursor"></span>';
+let _copilotScriptLoading = null;
 
-    const reader  = res.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText  = '';
-    let buffer    = '';
+function loadCopilotScript() {
+  if (window.OrbitalCopilot) return Promise.resolve(window.OrbitalCopilot);
+  if (_copilotScriptLoading) return _copilotScriptLoading;
+  _copilotScriptLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = './js/copilot.js?v=1';
+    s.onload = () => resolve(window.OrbitalCopilot);
+    s.onerror = () => reject(new Error('Failed to load Space Copilot'));
+    document.body.appendChild(s);
+  });
+  return _copilotScriptLoading;
+}
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
-        if (!data || data === '[DONE]') continue;
-        try {
-          const json = JSON.parse(data);
-          // Anthropic streaming events
-          if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
-            fullText += json.delta.text;
-            bubble.innerHTML = formatCopilotMarkdown(fullText) + '<span class="copilot-cursor"></span>';
-            scrollCopilotToBottom();
-          }
-        } catch (_) {}
-      }
-    }
-
-    bubble.innerHTML = formatCopilotMarkdown(fullText);
-    copilot.messages.push({ role: 'assistant', content: fullText });
-    setStatus('Powered by Claude');
-
-  } catch (err) {
-    typingEl.remove();
-    const { bubble } = appendMessage('ai', '');
-    bubble.classList.add('copilot-error');
-    bubble.textContent = `Error: ${err.message}`;
-    setStatus('Error — please retry');
-    console.error('[Copilot]', err);
-  } finally {
-    copilot.loading = false;
-    document.getElementById('copilotSend').disabled = false;
-    scrollCopilotToBottom();
+async function ensureSpaceCopilot() {
+  const mod = await loadCopilotScript();
+  if (!window._copilotReady) {
+    mod.init(getCopilotHooks());
+    window._copilotReady = true;
   }
+  return mod;
 }
 
-function appendMessage(role, text) {
-  const msgs = document.getElementById('copilotMessages');
-  const wrap = document.createElement('div');
-  wrap.className = `copilot-msg ${role}`;
-
-  if (role === 'ai' && state.selectedIndex >= 0) {
-    const sat = getFilteredSats()[state.selectedIndex];
-    if (sat) {
-      const badge = document.createElement('div');
-      badge.className = 'copilot-ctx-badge';
-      badge.innerHTML = `🛰️ ${sat.name}`;
-      wrap.appendChild(badge);
+function initSpaceCopilot() {
+  document.getElementById('copilotFab')?.addEventListener('click', async () => {
+    try {
+      const mod = await ensureSpaceCopilot();
+      mod.toggleCopilot();
+    } catch (e) {
+      showToast('Space Copilot failed to load');
+      devLog(e);
     }
-  }
-
-  const bubble = document.createElement('div');
-  bubble.className = 'copilot-bubble';
-  bubble.innerHTML = role === 'user' ? escapeHtml(text) : formatCopilotMarkdown(text);
-
-  const meta = document.createElement('div');
-  meta.className = 'copilot-msg-meta';
-  const t = new Date();
-  const hhmm = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
-  meta.textContent = role === 'user' ? `You · ${hhmm}` : `ORBITAL AI · ${hhmm}`;
-
-  wrap.appendChild(bubble);
-  wrap.appendChild(meta);
-  msgs.appendChild(wrap);
-  scrollCopilotToBottom();
-  return { wrap, bubble };
-}
-
-function appendTyping() {
-  const msgs = document.getElementById('copilotMessages');
-  const el = document.createElement('div');
-  el.className = 'copilot-typing';
-  el.innerHTML = '<span></span><span></span><span></span>';
-  msgs.appendChild(el);
-  scrollCopilotToBottom();
-  return el;
-}
-
-function scrollCopilotToBottom() {
-  const msgs = document.getElementById('copilotMessages');
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-function formatCopilotMarkdown(text) {
-  return text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/^[\*\-] (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>[\s\S]*?<\/li>(\n|$))+/g, s => `<ul>${s}</ul>`)
-    .replace(/\n{2,}/g, '</p><p>')
-    .replace(/\n/g, '<br>')
-    .replace(/^(?!<[uop])([\s\S]+)$/, '<p>$1</p>');
-}
-
-function escapeHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initCopilot);
-} else {
-  initCopilot();
+  });
 }
 
 // ============================================================
@@ -2049,7 +2104,7 @@ function initMobileUI() {
   document.getElementById('mobAI').addEventListener('click', () => {
     openDrawer(aiSheet);
     document.getElementById('mobAI').classList.add('active');
-    document.getElementById('mobAIInput').focus();
+    ensureSpaceCopilot().then(() => document.getElementById('mobAIInput')?.focus()).catch(() => {});
   });
 
   // ── Sync mobile filter buttons with desktop state ──
@@ -2085,119 +2140,12 @@ function initMobileUI() {
     });
   });
 
-  // ── Mobile AI panel ──
+  // Mobile AI uses lazy Space Copilot module (js/copilot.js)
   const mobAIInput = document.getElementById('mobAIInput');
-  const mobAISend  = document.getElementById('mobAISend');
-  const mobAIMsgs  = document.getElementById('mobAIMessages');
-
-  // Auto-resize
-  mobAIInput.addEventListener('input', () => {
+  mobAIInput?.addEventListener('input', () => {
     mobAIInput.style.height = 'auto';
     mobAIInput.style.height = Math.min(mobAIInput.scrollHeight, 100) + 'px';
   });
-
-  // Quick chips in mobile AI
-  document.querySelectorAll('#mobAISheet .copilot-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      mobAIInput.value = chip.dataset.q;
-      sendMobAI();
-    });
-  });
-
-  mobAISend.addEventListener('click', sendMobAI);
-  mobAIInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMobAI(); }
-  });
-
-  async function sendMobAI() {
-    const text = mobAIInput.value.trim();
-    if (!text || mobAISend.disabled) return;
-    mobAIInput.value = '';
-    mobAIInput.style.height = 'auto';
-
-    const welcome = mobAIMsgs.querySelector('.copilot-welcome');
-    if (welcome) welcome.style.display = 'none';
-
-    // User bubble
-    appendMobMsg('user', text);
-    copilot.messages.push({ role: 'user', content: text });
-
-    // Typing
-    const typing = document.createElement('div');
-    typing.className = 'copilot-typing';
-    typing.innerHTML = '<span></span><span></span><span></span>';
-    mobAIMsgs.appendChild(typing);
-    mobAIMsgs.scrollTop = mobAIMsgs.scrollHeight;
-
-    mobAISend.disabled = true;
-
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 500,
-          system: 'You are ORBITAL AI, an expert satellite and space assistant. Be concise (under 180 words), use **bold** for key terms.',
-          stream: true,
-          messages: copilot.messages.slice(-10)
-        })
-      });
-
-      typing.remove();
-      const { bubble } = appendMobMsg('ai', '');
-      bubble.innerHTML = '<span class="copilot-cursor"></span>';
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let full = '', buf = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const j = JSON.parse(line.slice(6));
-            if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') {
-              full += j.delta.text;
-              bubble.innerHTML = formatCopilotMarkdown(full) + '<span class="copilot-cursor"></span>';
-              mobAIMsgs.scrollTop = mobAIMsgs.scrollHeight;
-            }
-          } catch(_) {}
-        }
-      }
-      bubble.innerHTML = formatCopilotMarkdown(full);
-      copilot.messages.push({ role: 'assistant', content: full });
-    } catch(e) {
-      typing.remove();
-      const { bubble } = appendMobMsg('ai', '');
-      bubble.classList.add('copilot-error');
-      bubble.textContent = 'Error: ' + e.message;
-    } finally {
-      mobAISend.disabled = false;
-      mobAIMsgs.scrollTop = mobAIMsgs.scrollHeight;
-    }
-  }
-
-  function appendMobMsg(role, text) {
-    const wrap   = document.createElement('div');
-    wrap.className = `copilot-msg ${role}`;
-    const bubble = document.createElement('div');
-    bubble.className = 'copilot-bubble';
-    bubble.innerHTML = role === 'user' ? escapeHtml(text) : formatCopilotMarkdown(text);
-    wrap.appendChild(bubble);
-    mobAIMsgs.appendChild(wrap);
-    mobAIMsgs.scrollTop = mobAIMsgs.scrollHeight;
-    return { wrap, bubble };
-  }
 }
 
 // Re-init on resize crossing the 768px boundary
@@ -2239,10 +2187,9 @@ function initPassPredictor() {
 
   if (!panel) return;
 
-  closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+  closeBtn?.addEventListener('click', () => panel.classList.remove('open'));
 
-  // GPS button
-  locBtn.addEventListener('click', () => {
+  locBtn?.addEventListener('click', () => {
     if (!navigator.geolocation) {
       showToast('Geolocation not supported');
       return;
@@ -2270,7 +2217,7 @@ function initPassPredictor() {
   });
 
   // Manual coordinates
-  manualBtn.addEventListener('click', () => {
+  manualBtn?.addEventListener('click', () => {
     const lat = parseFloat(manualLatEl.value);
     const lon = parseFloat(manualLonEl.value);
     if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
@@ -2305,6 +2252,7 @@ function initPassPredictor() {
 function openPassPredictor(sat) {
   const panel = document.getElementById('passPanel');
   if (!panel) return;
+  closeFeaturePanels('passPanel');
   passState.currentSat = sat;
   document.getElementById('passSatName').textContent = sat.name;
   document.getElementById('passSatCat').textContent = sat.cat.toUpperCase();
@@ -2484,10 +2432,11 @@ function initBookmarks() {
   if (!panel || !openBtn) return;
 
   openBtn.addEventListener('click', () => {
+    closeFeaturePanels('bookmarksPanel');
     panel.classList.toggle('open');
     renderBookmarksList();
   });
-  closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+  closeBtn?.addEventListener('click', () => panel.classList.remove('open'));
   renderBookmarksList();
 }
 
@@ -2556,215 +2505,236 @@ function shareSatellite(sat, geo) {
 // ╚══════════════════════════════════════════════════════════════════╝
 
 const ISRO_MISSIONS = [
-  {
-    name: 'Chandrayaan-3', icon: '🌙', status: 'SUCCESS',
-    launch: '14 Jul 2023', agency: 'ISRO',
-    desc: 'First spacecraft to land near the lunar south pole. Pragyan rover operated for 14 days.',
-    highlight: 'India became the 4th nation to land on the Moon and the 1st to reach the south pole.',
-    norad: null, cat: 'science', color: '#ffd700'
-  },
-  {
-    name: 'Aditya-L1', icon: '☀️', status: 'ACTIVE',
-    launch: '2 Sep 2023', agency: 'ISRO',
-    desc: 'India\'s first solar observatory. Stationed at Lagrange point L1, 1.5 million km from Earth.',
-    highlight: 'Studying solar wind, coronal mass ejections and space weather from L1 point.',
-    norad: '57422', cat: 'science', color: '#ff8c42'
-  },
-  {
-    name: 'PSLV-C58 / XPoSat', icon: '⭐', status: 'ACTIVE',
-    launch: '1 Jan 2024', agency: 'ISRO',
-    desc: 'India\'s first dedicated space observatory for studying X-ray polarimetry of cosmic sources.',
-    highlight: 'Only the 2nd X-ray polarimetry mission in the world after NASA\'s IXPE.',
-    norad: '58348', cat: 'science', color: '#c084fc'
-  },
-  {
-    name: 'GSAT-20 / CMS-03', icon: '📡', status: 'ACTIVE',
-    launch: '18 Nov 2024', agency: 'ISRO/SpaceX',
-    desc: 'High-throughput communication satellite launched on SpaceX Falcon 9 for broadband India.',
-    highlight: 'First major ISRO payload launched on a foreign commercial rocket.',
-    norad: null, cat: 'comm', color: '#00c8ff'
-  },
-  {
-    name: 'Mangalyaan (MOM)', icon: '🔴', status: 'ENDED',
-    launch: '5 Nov 2013', agency: 'ISRO',
-    desc: 'India\'s first interplanetary mission. Mars Orbiter Mission exceeded planned 6-month life by years.',
-    highlight: 'India became the first nation to succeed Mars orbit insertion on first attempt.',
-    norad: null, cat: 'science', color: '#ff4444'
-  },
-  {
-    name: 'Chandrayaan-2', icon: '🌙', status: 'PARTIAL',
-    launch: '22 Jul 2019', agency: 'ISRO',
-    desc: 'Orbiter remains operational; lander Vikram crash-landed. Orbiter still provides lunar data.',
-    highlight: 'Orbiter has mapped the Moon with unprecedented resolution including south pole.',
-    norad: '44441', cat: 'science', color: '#aabb44'
-  },
-  {
-    name: 'RISAT-2BR1', icon: '🔍', status: 'ACTIVE',
-    launch: '11 Dec 2019', agency: 'ISRO',
-    desc: 'Radar Imaging Satellite for Earth observation including agriculture, flood, border monitoring.',
-    highlight: 'Sub-meter resolution SAR satellite for national security and disaster management.',
-    norad: '44857', cat: 'other', color: '#00ff9d'
-  },
-  {
-    name: 'Cartosat-3', icon: '🗺️', status: 'ACTIVE',
-    launch: '27 Nov 2019', agency: 'ISRO',
-    desc: 'High-resolution Earth observation satellite with 25cm panchromatic resolution.',
-    highlight: 'Highest resolution civilian satellite from India — used for urban planning & defence.',
-    norad: '44793', cat: 'other', color: '#4ecdc4'
-  },
-  {
-    name: 'NavIC / IRNSS', icon: '🧭', status: 'ACTIVE',
-    launch: '2013–2018', agency: 'ISRO',
-    desc: 'India\'s own navigation satellite system. 7-satellite constellation covering India + 1500km radius.',
-    highlight: 'India is one of only 5 countries with its own independent navigation satellite system.',
-    norad: null, cat: 'gnss', color: '#ff6b35'
-  },
-  {
-    name: 'GSAT-11 (Dream Sat)', icon: '🌐', status: 'ACTIVE',
-    launch: '5 Dec 2018', agency: 'ISRO',
-    desc: 'Heaviest satellite built by India. 5.8-tonne multi-beam broadband communication satellite.',
-    highlight: 'Provides broadband speeds of 14 Gbps to Indian mainland and islands.',
-    norad: '43864', cat: 'comm', color: '#00c8ff'
-  }
+  { name: 'Chandrayaan-3', icon: '🌙', status: 'SUCCESS', type: 'Lunar Lander', year: '2023', launch: 'Jul 2023', agency: 'ISRO',
+    desc: 'Lunar lander-rover mission that reached the Moon\'s south polar region.',
+    highlight: '4th nation to soft-land on the Moon; first landing near the lunar south pole region.',
+    norad: null, search: 'CHANDRAYAAN', color: '#ffd700' },
+  { name: 'Chandrayaan-2 Orbiter', icon: '🌙', status: 'ACTIVE', type: 'Lunar Orbiter', year: '2019', launch: 'Jul 2019', agency: 'ISRO',
+    desc: 'Orbiter still active; mapped the Moon including the south pole at high resolution.',
+    highlight: 'Orbiter continues returning science data years after launch.',
+    norad: '44441', search: 'CHANDRAYAAN-2', color: '#aabb44' },
+  { name: 'Aditya-L1', icon: '☀️', status: 'ACTIVE', type: 'Solar Observatory', year: '2023', launch: 'Sep 2023', agency: 'ISRO',
+    desc: 'India\'s first dedicated solar observatory at the Sun-Earth L1 point.',
+    highlight: 'Monitors solar storms and space weather affecting Earth.',
+    norad: '57422', search: 'ADITYA', color: '#ff8c42' },
+  { name: 'XPoSat', icon: '⭐', status: 'ACTIVE', type: 'Space Telescope', year: '2024', launch: 'Jan 2024', agency: 'ISRO',
+    desc: 'X-ray polarimetry observatory studying black holes and neutron stars.',
+    highlight: 'Among only a handful of X-ray polarimetry missions worldwide.',
+    norad: '58348', search: 'XPOSAT', color: '#c084fc' },
+  { name: 'Mangalyaan (MOM)', icon: '🔴', status: 'ENDED', type: 'Mars Orbiter', year: '2013', launch: 'Nov 2013', agency: 'ISRO',
+    desc: 'India\'s first Mars mission; operated well beyond its planned lifetime.',
+    highlight: '1st nation to reach Mars orbit on its first attempt.',
+    norad: null, search: 'MOM', color: '#ff4444' },
+  { name: 'NavIC (IRNSS)', icon: '🧭', status: 'ACTIVE', type: 'Navigation Constellation', year: '2013–2018', launch: '2013–2018', agency: 'ISRO',
+    desc: 'Regional GNSS constellation for India and surrounding region.',
+    highlight: 'India operates its own independent navigation satellite system.',
+    norad: '41859', search: 'IRNSS', color: '#ff6b35' },
+  { name: 'Cartosat-3', icon: '🗺️', status: 'ACTIVE', type: 'Earth Observation', year: '2019', launch: 'Nov 2019', agency: 'ISRO',
+    desc: 'High-resolution imaging satellite for mapping and monitoring.',
+    highlight: 'Sub-metre class Earth imaging for urban and infrastructure planning.',
+    norad: '44793', search: 'CARTOSAT-3', color: '#4ecdc4' },
+  { name: 'RISAT-2BR1', icon: '🔍', status: 'ACTIVE', type: 'Radar Imaging', year: '2019', launch: 'Dec 2019', agency: 'ISRO',
+    desc: 'SAR satellite for all-weather Earth observation.',
+    highlight: 'Radar sees through clouds — useful for floods and agriculture.',
+    norad: '44857', search: 'RISAT-2BR1', color: '#00ff9d' },
+  { name: 'GSAT-11', icon: '🌐', status: 'ACTIVE', type: 'Communications', year: '2018', launch: 'Dec 2018', agency: 'ISRO',
+    desc: 'High-throughput broadband communication satellite.',
+    highlight: 'One of ISRO\'s heaviest and highest-capacity comm satellites.',
+    norad: '43864', search: 'GSAT-11', color: '#00c8ff' },
+  { name: 'Astrosat', icon: '🔭', status: 'ACTIVE', type: 'Multi-wavelength Observatory', year: '2015', launch: 'Sep 2015', agency: 'ISRO',
+    desc: 'India\'s first dedicated multi-wavelength astronomy satellite.',
+    highlight: 'Observes universe in UV, optical, and X-ray bands simultaneously.',
+    norad: '40930', search: 'ASTROSAT', color: '#9b59b6' }
 ];
 
 const UPCOMING_LAUNCHES = [
-  { name: 'NISAR', date: 'Early 2025', rocket: 'GSLV Mk-II', desc: 'Joint NASA-ISRO Earth observation SAR mission — most expensive Earth science satellite ever.', flag: '🇮🇳🇺🇸' },
-  { name: 'Gaganyaan (Uncrewed)', date: '2025', rocket: 'LVM3', desc: 'Test flight for India\'s first crewed spacecraft without astronauts.', flag: '🇮🇳' },
-  { name: 'PSLV-C61', date: '2025', rocket: 'PSLV-XL', desc: 'Multiple commercial & research payloads from India and international clients.', flag: '🇮🇳' },
-  { name: 'Chandrayaan-4', date: '2026–27', rocket: 'LVM3', desc: 'Lunar sample-return mission. Will collect and bring back Moon rock to Earth.', flag: '🇮🇳' },
-  { name: 'Gaganyaan (Crewed)', date: '2026', rocket: 'LVM3', desc: 'India\'s first crewed spaceflight. 3 Vyomanauts to low Earth orbit.', flag: '🇮🇳👨‍🚀' },
-  { name: 'Shukrayaan-1', date: '2028', rocket: 'LVM3', desc: 'Venus Orbiter Mission — studying Venus atmosphere and surface.', flag: '🇮🇳' },
+  { name: 'NISAR', status: 'TARGETED', date: 'Targeted 2025', rocket: 'GSLV Mk-II', desc: 'NASA-ISRO joint SAR Earth science mission for climate, agriculture, and hazards.', flag: '🇮🇳🇺🇸' },
+  { name: 'Gaganyaan — Uncrewed Test', status: 'IN DEVELOPMENT', date: 'Planned before crewed flight', rocket: 'LVM3', desc: 'Uncrewed orbital test of the crew module and escape systems.', flag: '🇮🇳' },
+  { name: 'Gaganyaan — Crewed Mission', status: 'PLANNED', date: 'Targeted mid-2020s', rocket: 'LVM3', desc: 'India\'s first crewed orbital flight with Vyomanauts.', flag: '🇮🇳👨‍🚀' },
+  { name: 'Chandrayaan-4', status: 'PLANNED', date: 'Targeted 2026–2027', rocket: 'LVM3', desc: 'Planned lunar sample-return architecture (official timelines may shift).', flag: '🇮🇳' },
+  { name: 'Shukrayaan (Venus Orbiter)', status: 'TBD', date: 'Under study', rocket: 'LVM3 (expected)', desc: 'Proposed Venus orbiter to study atmosphere and surface processes.', flag: '🇮🇳' },
+  { name: 'Bharatiya Antariksh Station', status: 'IN DEVELOPMENT', date: 'Targeted ~2040 phase', rocket: 'LVM3 / future HLV', desc: 'India\'s planned modular space station — long-term human spaceflight goal.', flag: '🇮🇳' }
 ];
 
-function initISROPanel() {
-  const panel   = document.getElementById('isroPanel');
-  const openBtn = document.getElementById('btnISRO');
-  const closeBtn= document.getElementById('isroClose');
-  if (!panel || !openBtn) return;
+async function loadIsroNews() {
+  const el = document.getElementById('isroTab_news');
+  if (!el) return;
+  if (el.dataset.loading === '1') return;
+  el.dataset.loading = '1';
+  el.innerHTML = '<div class="isro-news-loading">Loading ISRO news…</div>';
+  try {
+    const res = await fetch('./data/isro-news.json', { signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined });
+    const data = res.ok ? await res.json() : { articles: [] };
+    const articles = data.articles || [];
+    if (!articles.length) {
+      el.innerHTML = '<div class="isro-news-empty">No news articles available right now.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="isro-news-updated">Updated ${new Date(data.updated || Date.now()).toLocaleDateString()}</div>
+      ${articles.map(a => `
+        <a class="isro-news-card" href="${a.url}" target="_blank" rel="noopener noreferrer">
+          <div class="isro-news-title">${a.title}</div>
+          <div class="isro-news-meta">${a.source || 'ISRO'} · ${a.date || ''}</div>
+          <div class="isro-news-summary">${a.summary || ''}</div>
+        </a>`).join('')}`;
+  } catch (e) {
+    el.innerHTML = '<div class="isro-news-empty">Could not load news — tracker still works normally.</div>';
+  } finally {
+    el.dataset.loading = '0';
+  }
+}
 
-  openBtn.addEventListener('click', () => {
-    panel.classList.toggle('open');
-    if (panel.classList.contains('open')) renderISROContent();
-  });
-  closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+function renderIsroMissionCard(m) {
+  const statusClass = {
+    SUCCESS: 'status-success', ACTIVE: 'status-active', ENDED: 'status-ended',
+    PARTIAL: 'status-partial', UPCOMING: 'status-partial'
+  }[m.status] || 'status-active';
+  const card = document.createElement('div');
+  card.className = 'isro-mission-card';
+  card.style.setProperty('--mc', m.color);
+  card.innerHTML = `
+    <div class="isro-card-header">
+      <span class="isro-mission-icon">${m.icon}</span>
+      <div class="isro-mission-meta">
+        <div class="isro-mission-name">${m.name}</div>
+        <div class="isro-mission-sub">${m.type} · ${m.year} · ${m.agency}</div>
+      </div>
+      <span class="isro-status ${statusClass}">${m.status}</span>
+    </div>
+    <div class="isro-mission-desc">${m.desc}</div>
+    <div class="isro-mission-highlight">💡 ${m.highlight}</div>
+    ${m.norad ? `<button type="button" class="isro-track-btn">🛰️ TRACK THIS SATELLITE</button>` : ''}`;
+  card.querySelector('.isro-track-btn')?.addEventListener('click', () => trackSatelliteByNorad(m.norad, m.search || m.name));
+  return card;
+}
 
-  // Tab switching
-  document.querySelectorAll('.isro-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.isro-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      document.querySelectorAll('.isro-tab-content').forEach(c => c.classList.remove('active'));
-      document.getElementById(`isroTab_${tab.dataset.tab}`).classList.add('active');
-    });
+function renderIsroStatsTab() {
+  const statsEl = document.getElementById('isroTab_stats');
+  if (!statsEl) return;
+  const isroSats = getIsroSatellites();
+  statsEl.innerHTML = `
+    <div class="isro-stats-grid">
+      <div class="isro-stat-card"><div class="isro-stat-num" style="color:#ffd700">100+</div><div class="isro-stat-label">Satellites Launched</div></div>
+      <div class="isro-stat-card"><div class="isro-stat-num" style="color:#00ff9d">57+</div><div class="isro-stat-label">PSLV Launches</div></div>
+      <div class="isro-stat-card"><div class="isro-stat-num" style="color:#00c8ff">${isroSats.length}</div><div class="isro-stat-label">ISRO Sats Tracked Now</div></div>
+      <div class="isro-stat-card"><div class="isro-stat-num" style="color:#c084fc">4th</div><div class="isro-stat-label">Nation to Soft-Land on Moon</div></div>
+      <div class="isro-stat-card"><div class="isro-stat-num" style="color:#ff8c42">1st</div><div class="isro-stat-label">Mars Orbit — 1st Try</div></div>
+      <div class="isro-stat-card"><div class="isro-stat-num" style="color:#ff9933">NavIC</div><div class="isro-stat-label">Regional Navigation System</div></div>
+    </div>
+    <div class="isro-hindi-section">
+      <div class="isro-hindi-title">भारत का अंतरिक्ष मिशन</div>
+      <div class="isro-hindi-text">भारत अंतरिक्ष अनुसंधान संगठन (इसरो) भारत को अंतरिक्ष अनुसंधान, उपग्रह प्रौद्योगिकी और ग्रहीय खोज में अग्रणी बनाता है। चंद्रयान-३ ने दक्षिण ध्रुव क्षेत्र में उतरकर इतिहास रचा।</div>
+      <div class="isro-hindi-sub">ISRO advances India\'s space science, satellite services, and exploration — from NavIC navigation to Chandrayaan lunar missions.</div>
+    </div>
+    <div class="isro-live-sats">
+      <div class="isro-live-label">🟢 ISRO SATELLITES IN CURRENT TLE DATA (${isroSats.length})</div>
+      ${isroSats.length ? isroSats.map(s => `
+        <button type="button" class="isro-live-item" data-norad="${s.norad}">${getCategoryEmoji(s.cat)} ${s.name}</button>`).join('') : '<div class="isro-news-empty">No ISRO satellites in bundled data — switch to ALL filter after live update.</div>'}
+    </div>`;
+  statsEl.querySelectorAll('.isro-live-item[data-norad]').forEach(btn => {
+    btn.addEventListener('click', () => trackSatelliteByNorad(btn.dataset.norad, btn.textContent.trim()));
   });
 }
 
+function closeFeaturePanels(exceptId) {
+  ['passPanel', 'bookmarksPanel', 'isroPanel'].forEach(id => {
+    if (id !== exceptId) document.getElementById(id)?.classList.remove('open');
+  });
+}
+
+function openISROPanel() {
+  const panel = document.getElementById('isroPanel');
+  if (!panel) return;
+  closeFeaturePanels('isroPanel');
+  panel.classList.add('open');
+  renderISROContent();
+}
+
+function renderIsroMissionsTab() {
+  const el = document.getElementById('isroTab_missions');
+  if (!el) return;
+  el.innerHTML = '';
+  ISRO_MISSIONS.forEach(m => el.appendChild(renderIsroMissionCard(m)));
+}
+
+function renderIsroLaunchesTab() {
+  const el = document.getElementById('isroTab_launches');
+  if (!el) return;
+  el.innerHTML = '';
+  UPCOMING_LAUNCHES.forEach(l => {
+    const card = document.createElement('div');
+    card.className = 'isro-launch-card';
+    card.innerHTML = `
+      <div class="isro-launch-header">
+        <span class="isro-launch-flag">${l.flag}</span>
+        <div>
+          <div class="isro-launch-name">${l.name}</div>
+          <div class="isro-launch-rocket">${l.rocket}</div>
+        </div>
+        <span class="isro-launch-status">${l.status}</span>
+      </div>
+      <div class="isro-launch-date">${l.date}</div>
+      <div class="isro-launch-desc">${l.desc}</div>`;
+    el.appendChild(card);
+  });
+}
+
+function switchIsroTab(tabName) {
+  document.querySelectorAll('.isro-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.isro-tab-content').forEach(c => c.classList.remove('active'));
+  const content = document.getElementById(`isroTab_${tabName}`);
+  content?.classList.add('active');
+  if (tabName === 'missions') renderIsroMissionsTab();
+  if (tabName === 'launches') renderIsroLaunchesTab();
+  if (tabName === 'stats') renderIsroStatsTab();
+  if (tabName === 'news') loadIsroNews();
+}
+
+function initISROPanel() {
+  const panel = document.getElementById('isroPanel');
+  const openBtn = document.getElementById('btnISRO');
+  const closeBtn = document.getElementById('isroClose');
+  if (!panel || !openBtn) {
+    devLog('ISRO panel: missing DOM nodes');
+    return;
+  }
+
+  openBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (panel.classList.contains('open')) {
+      panel.classList.remove('open');
+    } else {
+      openISROPanel();
+    }
+  });
+
+  closeBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.remove('open');
+  });
+
+  document.querySelectorAll('.isro-tab').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      e.preventDefault();
+      switchIsroTab(tab.dataset.tab);
+    });
+  });
+
+  devLog('ISRO panel initialized');
+}
+
 function renderISROContent() {
-  // Missions tab
-  const missionsEl = document.getElementById('isroTab_missions');
-  if (missionsEl && !missionsEl.dataset.rendered) {
-    missionsEl.dataset.rendered = '1';
-    missionsEl.innerHTML = '';
-    ISRO_MISSIONS.forEach(m => {
-      const card = document.createElement('div');
-      card.className = 'isro-mission-card';
-      card.style.setProperty('--mc', m.color);
-      const statusClass = { SUCCESS:'status-success', ACTIVE:'status-active', ENDED:'status-ended', PARTIAL:'status-partial' }[m.status] || 'status-active';
-      card.innerHTML = `
-        <div class="isro-card-header">
-          <span class="isro-mission-icon">${m.icon}</span>
-          <div class="isro-mission-meta">
-            <div class="isro-mission-name">${m.name}</div>
-            <div class="isro-mission-sub">${m.agency} · ${m.launch}</div>
-          </div>
-          <span class="isro-status ${statusClass}">${m.status}</span>
-        </div>
-        <div class="isro-mission-desc">${m.desc}</div>
-        <div class="isro-mission-highlight">💡 ${m.highlight}</div>
-        ${m.norad ? `<button class="isro-track-btn" data-norad="${m.norad}">🛰️ TRACK THIS SATELLITE</button>` : ''}`;
-      card.querySelector('.isro-track-btn')?.addEventListener('click', () => {
-        const filtered = getFilteredSats();
-        const idx = filtered.findIndex(s => s.norad === m.norad);
-        if (idx >= 0) { selectSatellite(idx); document.getElementById('isroPanel').classList.remove('open'); }
-        else showToast('Switch filter to ALL first');
-      });
-      missionsEl.appendChild(card);
-    });
-  }
-
-  // Launches tab
-  const launchesEl = document.getElementById('isroTab_launches');
-  if (launchesEl && !launchesEl.dataset.rendered) {
-    launchesEl.dataset.rendered = '1';
-    launchesEl.innerHTML = '';
-    UPCOMING_LAUNCHES.forEach(l => {
-      const card = document.createElement('div');
-      card.className = 'isro-launch-card';
-      card.innerHTML = `
-        <div class="isro-launch-header">
-          <span class="isro-launch-flag">${l.flag}</span>
-          <div>
-            <div class="isro-launch-name">${l.name}</div>
-            <div class="isro-launch-rocket">${l.rocket}</div>
-          </div>
-          <span class="isro-launch-date">${l.date}</span>
-        </div>
-        <div class="isro-launch-desc">${l.desc}</div>`;
-      launchesEl.appendChild(card);
-    });
-  }
-
-  // Stats tab
-  const statsEl = document.getElementById('isroTab_stats');
-  if (statsEl && !statsEl.dataset.rendered) {
-    statsEl.dataset.rendered = '1';
-    const isroSats = state.satellites.filter(s => {
-      const n = s.name.toUpperCase();
-      return n.includes('CARTOSAT') || n.includes('RISAT') || n.includes('RESOURCESAT') ||
-             n.includes('GSAT') || n.includes('IRNSS') || n.includes('NAVIC') ||
-             n.includes('INSAT') || n.includes('SARAL') || n.includes('OCEANSAT') ||
-             n.includes('EMISAT') || n.includes('MICROSAT');
-    });
-    statsEl.innerHTML = `
-      <div class="isro-stats-grid">
-        <div class="isro-stat-card">
-          <div class="isro-stat-num" style="color:#ffd700">100+</div>
-          <div class="isro-stat-label">Satellites Launched</div>
-        </div>
-        <div class="isro-stat-card">
-          <div class="isro-stat-num" style="color:#00ff9d">57+</div>
-          <div class="isro-stat-label">PSLV Launches</div>
-        </div>
-        <div class="isro-stat-card">
-          <div class="isro-stat-num" style="color:#00c8ff">${isroSats.length}</div>
-          <div class="isro-stat-label">ISRO Sats Tracked Now</div>
-        </div>
-        <div class="isro-stat-card">
-          <div class="isro-stat-num" style="color:#c084fc">4th</div>
-          <div class="isro-stat-label">Nation on the Moon</div>
-        </div>
-        <div class="isro-stat-card">
-          <div class="isro-stat-num" style="color:#ff8c42">1st</div>
-          <div class="isro-stat-label">Mars on 1st Attempt</div>
-        </div>
-        <div class="isro-stat-card">
-          <div class="isro-stat-num" style="color:#ff4444">2047</div>
-          <div class="isro-stat-label">India Space Station</div>
-        </div>
-      </div>
-      <div class="isro-hindi-section">
-        <div class="isro-hindi-title">भारत का अंतरिक्ष मिशन</div>
-        <div class="isro-hindi-text">इसरो — भारतीय अंतरिक्ष अनुसंधान संगठन। चंद्रयान, मंगलयान और गगनयान के साथ भारत अंतरिक्ष में नई ऊंचाइयां छू रहा है।</div>
-        <div class="isro-hindi-sub">India is reaching new heights in space with Chandrayaan, Mangalyaan, and Gaganyaan.</div>
-      </div>
-      ${isroSats.length > 0 ? `
-      <div class="isro-live-sats">
-        <div class="isro-live-label">🟢 ISRO SATELLITES LIVE NOW</div>
-        ${isroSats.slice(0,8).map((s,i) => `
-          <div class="isro-live-item" onclick="(() => { const f=getFilteredSats(); const idx=f.findIndex(x=>x.norad==='${s.norad}'); if(idx>=0)selectSatellite(idx); document.getElementById('isroPanel').classList.remove('open'); })()">
-            ${getCategoryEmoji(s.cat)} ${s.name}
-          </div>`).join('')}
-      </div>` : ''}`;
+  try {
+    switchIsroTab('missions');
+    renderIsroLaunchesTab();
+    renderIsroStatsTab();
+    loadIsroNews();
+  } catch (err) {
+    devLog('ISRO render failed', err);
+    showToast('ISRO panel failed to load — try again');
   }
 }
