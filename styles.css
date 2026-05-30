@@ -886,8 +886,16 @@ body { font-family: var(--font-mono); }
   .sat-count-wrap .count { font-size: 16px; }
   .sat-count-wrap .label { font-size: 8px; }
 
-  /* Canvas */
-  #canvas { top: 48px; height: calc(100% - 108px); }
+  /* Fix 3: Canvas strictly contained within viewport — no overflow below */
+  #canvas {
+    position: fixed;
+    top: 48px;
+    left: 0;
+    width: 100vw;
+    /* 48px header + 60px nav = 108px; canvas fills the rest exactly */
+    height: calc(100vh - 108px);
+    max-height: calc(100vh - 108px);
+  }
 
   /* Hide desktop-only elements */
   .sat-list-panel  { display: none !important; }
@@ -904,26 +912,31 @@ body { font-family: var(--font-mono); }
     transform: none;
   }
 
-  /* Info panel -> full-width bottom sheet */
+  /* Fix 3: Info panel as proper bottom sheet — max 55vh so globe still visible */
   .info-panel {
     right: 0; left: 0; top: auto;
     bottom: 60px;
     width: 100%;
-    max-height: 72vh;
+    /* Capped at 55vh — globe stays visible above it */
+    max-height: 55vh;
     border-radius: 16px 16px 0 0;
     border-left: none; border-right: none; border-bottom: none;
-    border-top: 1px solid rgba(0,200,255,0.22);
+    border-top: 2px solid rgba(0,200,255,0.30);
     transform: translateY(110%);
     transition: transform 0.38s cubic-bezier(0.22,1,0.36,1);
-    box-shadow: 0 -8px 40px rgba(0,0,0,0.7);
+    box-shadow: 0 -12px 48px rgba(0,200,255,0.08), 0 -2px 0 rgba(0,200,255,0.15);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
+  /* Drag handle pill above panel */
   .info-panel::before {
     content: '';
     display: block;
-    width: 36px; height: 4px;
-    background: rgba(0,200,255,0.25);
+    width: 40px; height: 4px;
+    background: rgba(0,200,255,0.30);
     border-radius: 2px;
     margin: 10px auto 4px;
+    flex-shrink: 0;
   }
   .info-panel.open { transform: translateY(0); }
 
