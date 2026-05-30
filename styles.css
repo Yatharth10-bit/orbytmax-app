@@ -1330,3 +1330,341 @@ body { font-family: var(--font-mono); }
 }
 
 /* Copilot hidden on mobile — accessed via bottom nav */
+
+/* ═══════════════════════════════════════════════════════════
+   HEADER ICON BUTTONS (Bookmarks, ISRO)
+═══════════════════════════════════════════════════════════ */
+.header-icon-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.12em;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+.header-icon-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,200,255,0.06); }
+.header-icon-btn.isro-btn:hover { border-color: #ff9933; color: #ff9933; background: rgba(255,153,51,0.06); }
+.header-btn-label { font-size: 9px; letter-spacing: 0.12em; }
+.header-right { display: flex; align-items: center; }
+
+/* ═══════════════════════════════════════════════════════════
+   SHARED FEATURE PANEL BASE
+═══════════════════════════════════════════════════════════ */
+.feature-panel {
+  position: fixed;
+  top: 62px;
+  width: 340px;
+  max-height: calc(100vh - 80px);
+  background: rgba(3, 9, 20, 0.96);
+  border: 1px solid var(--border-bright);
+  border-radius: 12px;
+  backdrop-filter: blur(22px);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px) scale(0.98);
+  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.22,1,0.36,1);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,200,255,0.06);
+}
+.feature-panel.open {
+  opacity: 1; pointer-events: all;
+  transform: translateY(0) scale(1);
+}
+
+.pass-panel      { right: 20px; }
+.bookmarks-panel { right: 20px; }
+.isro-panel      { right: 20px; }
+
+/* When multiple open, offset them */
+.bookmarks-panel.open ~ .isro-panel { right: 380px; }
+
+.fp-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,200,255,0.03);
+  flex-shrink: 0;
+}
+.isro-header { background: rgba(255,153,51,0.04); border-bottom-color: rgba(255,153,51,0.15); }
+.fp-title-wrap { display: flex; align-items: center; gap: 10px; }
+.fp-icon { font-size: 22px; }
+.fp-title { font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: var(--text); }
+.fp-sub { font-size: 9px; color: var(--text-faint); letter-spacing: 0.1em; margin-top: 2px; }
+.fp-close {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text-faint); width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 13px; transition: all 0.15s;
+}
+.fp-close:hover { border-color: var(--danger); color: var(--danger); }
+
+.fp-body {
+  flex: 1; overflow-y: auto; padding: 14px 16px;
+  scrollbar-width: thin; scrollbar-color: rgba(0,200,255,0.15) transparent;
+}
+.fp-body::-webkit-scrollbar { width: 3px; }
+.fp-body::-webkit-scrollbar-thumb { background: rgba(0,200,255,0.15); border-radius: 2px; }
+
+/* ═══════════════════════════════════════════════════════════
+   INFO PANEL ACTION BUTTONS (SAVE / SHARE / PASSES)
+═══════════════════════════════════════════════════════════ */
+.panel-action-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em;
+  padding: 4px 9px; cursor: pointer;
+  transition: all 0.15s; margin-left: 4px; margin-top: 4px;
+}
+.bookmark-btn:hover  { border-color: #ffd700; color: #ffd700; }
+.bookmark-btn.bookmarked { border-color: #ffd700; color: #ffd700; background: rgba(255,215,0,0.08); }
+.share-btn:hover     { border-color: var(--accent-2); color: var(--accent-2); }
+.pass-btn:hover      { border-color: var(--accent); color: var(--accent); }
+
+/* ═══════════════════════════════════════════════════════════
+   PASS PREDICTOR STYLES
+═══════════════════════════════════════════════════════════ */
+.pass-sat-badge {
+  display: inline-block; font-size: 9px; letter-spacing: 0.15em;
+  color: var(--accent); border: 1px solid rgba(0,200,255,0.3);
+  border-radius: 3px; padding: 2px 8px; margin-bottom: 14px;
+}
+.pass-section-label {
+  font-size: 9px; letter-spacing: 0.2em; color: var(--text-faint);
+  margin: 12px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 5px;
+}
+.pass-loc-btn {
+  width: 100%; background: rgba(0,200,255,0.06);
+  border: 1px solid var(--border-bright); border-radius: 7px;
+  color: var(--accent); font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.1em; padding: 10px; cursor: pointer;
+  transition: all 0.18s; margin-bottom: 10px;
+}
+.pass-loc-btn:hover { background: rgba(0,200,255,0.12); }
+
+.pass-cities {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px;
+}
+.pass-city-btn {
+  background: rgba(255,153,51,0.06); border: 1px solid rgba(255,153,51,0.2);
+  border-radius: 4px; color: #ff9933; font-family: var(--font-mono);
+  font-size: 9px; padding: 5px 9px; cursor: pointer; transition: all 0.14s;
+  letter-spacing: 0.04em;
+}
+.pass-city-btn:hover, .pass-city-btn.active {
+  background: rgba(255,153,51,0.14); border-color: #ff9933;
+}
+
+.pass-manual {
+  display: flex; gap: 6px; margin-bottom: 8px;
+}
+.pass-manual input {
+  flex: 1; background: rgba(0,0,0,0.4); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); font-family: var(--font-mono);
+  font-size: 10px; padding: 8px; outline: none;
+  transition: border-color 0.15s;
+}
+.pass-manual input:focus { border-color: var(--accent); }
+.pass-manual input::placeholder { color: var(--text-faint); font-size: 9px; }
+.pass-manual-btn {
+  background: rgba(0,200,255,0.08); border: 1px solid var(--border-bright);
+  border-radius: 5px; color: var(--accent); font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.1em; padding: 8px 10px; cursor: pointer;
+  transition: all 0.15s; white-space: nowrap;
+}
+.pass-manual-btn:hover { background: rgba(0,200,255,0.15); }
+
+.pass-location-label {
+  font-size: 10px; color: var(--accent-2); margin-bottom: 6px; letter-spacing: 0.05em;
+}
+
+.pass-results { display: flex; flex-direction: column; gap: 8px; }
+.pass-hint { font-size: 10px; color: var(--text-faint); line-height: 1.6; padding: 10px 0; }
+.pass-loading { display: flex; align-items: center; gap: 10px; color: var(--text-dim); font-size: 10px; padding: 12px 0; }
+.pass-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(0,200,255,0.2); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.pass-card {
+  background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; transition: border-color 0.15s;
+}
+.pass-card:hover { border-color: rgba(0,200,255,0.25); }
+.pass-excellent { border-left: 3px solid #ffd700; }
+.pass-good      { border-left: 3px solid var(--accent-2); }
+.pass-low       { border-left: 3px solid var(--text-faint); }
+
+.pass-card-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.pass-number { font-size: 9px; color: var(--text-faint); letter-spacing: 0.1em; }
+.pass-quality { font-size: 10px; color: var(--text); font-family: var(--font-display); font-weight: 600; flex: 1; }
+.pass-duration { font-size: 9px; color: var(--accent); letter-spacing: 0.08em; }
+
+.pass-card-times { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.pass-time-row { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 6px; }
+.pass-time-label { font-size: 8px; letter-spacing: 0.15em; color: var(--text-faint); }
+.pass-time-val { font-size: 10px; color: var(--text); }
+.pass-time-val strong { color: var(--accent); }
+.pass-az, .pass-el { font-size: 9px; color: var(--accent-2); letter-spacing: 0.05em; }
+
+.pass-share-btn {
+  width: 100%; background: rgba(0,200,255,0.05);
+  border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text-dim); font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.08em; padding: 7px;
+  cursor: pointer; transition: all 0.15s;
+}
+.pass-share-btn:hover { border-color: var(--accent-2); color: var(--accent-2); background: rgba(0,255,157,0.06); }
+
+/* ═══════════════════════════════════════════════════════════
+   BOOKMARKS PANEL STYLES
+═══════════════════════════════════════════════════════════ */
+.bm-hint {
+  font-size: 10px; color: var(--text-faint); line-height: 1.6;
+  padding: 4px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}
+.bm-hint strong { color: var(--text-dim); }
+.bm-empty { text-align: center; padding: 30px 0; }
+.bm-empty-icon { font-size: 32px; margin-bottom: 10px; }
+.bm-empty div:last-child { font-size: 10px; color: var(--text-faint); line-height: 1.7; letter-spacing: 0.05em; }
+.bm-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 7px;
+  border: 1px solid var(--border); margin-bottom: 6px;
+  background: rgba(0,0,0,0.2); transition: background 0.13s;
+}
+.bm-item:hover { background: rgba(0,200,255,0.04); }
+.bm-emoji { font-size: 18px; flex-shrink: 0; }
+.bm-info { flex: 1; overflow: hidden; }
+.bm-name { font-size: 11px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bm-norad { font-size: 9px; color: var(--text-faint); margin-top: 2px; }
+.bm-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.bm-go, .bm-rm {
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 4px; width: 26px; height: 26px; cursor: pointer;
+  color: var(--text-faint); font-size: 12px; display: flex;
+  align-items: center; justify-content: center; transition: all 0.14s;
+}
+.bm-go:hover { border-color: var(--accent); color: var(--accent); }
+.bm-rm:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ═══════════════════════════════════════════════════════════
+   ISRO PANEL STYLES
+═══════════════════════════════════════════════════════════ */
+.isro-tabs {
+  display: flex; border-bottom: 1px solid rgba(255,153,51,0.15);
+  flex-shrink: 0; background: rgba(255,153,51,0.02);
+}
+.isro-tab {
+  flex: 1; background: transparent; border: none;
+  color: var(--text-faint); font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.1em; padding: 10px 6px;
+  cursor: pointer; transition: all 0.15s; border-bottom: 2px solid transparent;
+}
+.isro-tab:hover { color: #ff9933; }
+.isro-tab.active { color: #ff9933; border-bottom-color: #ff9933; background: rgba(255,153,51,0.05); }
+
+.isro-body { padding: 12px 14px; }
+.isro-tab-content { display: none; }
+.isro-tab-content.active { display: block; }
+
+.isro-mission-card {
+  background: rgba(0,0,0,0.25); border: 1px solid var(--border);
+  border-left: 3px solid var(--mc, #ff9933);
+  border-radius: 0 8px 8px 0; padding: 12px; margin-bottom: 10px;
+  transition: background 0.14s;
+}
+.isro-mission-card:hover { background: rgba(255,153,51,0.03); }
+.isro-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.isro-mission-icon { font-size: 22px; flex-shrink: 0; }
+.isro-mission-meta { flex: 1; }
+.isro-mission-name { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--text); }
+.isro-mission-sub { font-size: 9px; color: var(--text-faint); letter-spacing: 0.05em; margin-top: 2px; }
+.isro-status { font-size: 8px; letter-spacing: 0.15em; padding: 3px 7px; border-radius: 3px; font-family: var(--font-mono); flex-shrink: 0; }
+.status-success { color: var(--accent-2); border: 1px solid rgba(0,255,157,0.35); background: rgba(0,255,157,0.07); }
+.status-active  { color: var(--accent);   border: 1px solid rgba(0,200,255,0.35); background: rgba(0,200,255,0.07); }
+.status-ended   { color: var(--text-faint);border: 1px solid rgba(150,150,150,0.3); background: rgba(100,100,100,0.07); }
+.status-partial { color: #ffd700; border: 1px solid rgba(255,215,0,0.35); background: rgba(255,215,0,0.07); }
+.isro-mission-desc { font-size: 10px; color: var(--text-dim); line-height: 1.55; margin-bottom: 7px; }
+.isro-mission-highlight {
+  font-size: 9px; color: #ff9933; line-height: 1.5;
+  background: rgba(255,153,51,0.06); border-radius: 4px;
+  padding: 6px 8px; margin-bottom: 8px; letter-spacing: 0.02em;
+}
+.isro-track-btn {
+  background: rgba(255,153,51,0.08); border: 1px solid rgba(255,153,51,0.3);
+  border-radius: 5px; color: #ff9933; font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.1em; padding: 6px 12px;
+  cursor: pointer; transition: all 0.15s; margin-top: 2px;
+}
+.isro-track-btn:hover { background: rgba(255,153,51,0.16); }
+
+.isro-launch-card {
+  background: rgba(0,0,0,0.25); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; margin-bottom: 8px;
+}
+.isro-launch-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.isro-launch-flag { font-size: 18px; flex-shrink: 0; }
+.isro-launch-name { font-family: var(--font-display); font-size: 12px; font-weight: 600; color: var(--text); }
+.isro-launch-rocket { font-size: 9px; color: var(--text-faint); letter-spacing: 0.05em; }
+.isro-launch-date {
+  margin-left: auto; font-size: 9px; color: #ff9933;
+  border: 1px solid rgba(255,153,51,0.3); border-radius: 3px; padding: 2px 7px;
+  letter-spacing: 0.08em; white-space: nowrap;
+}
+.isro-launch-desc { font-size: 10px; color: var(--text-dim); line-height: 1.5; }
+
+.isro-stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.isro-stat-card {
+  background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 8px; text-align: center;
+}
+.isro-stat-num { font-family: var(--font-display); font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+.isro-stat-label { font-size: 8px; color: var(--text-faint); letter-spacing: 0.08em; line-height: 1.4; }
+
+.isro-hindi-section {
+  background: linear-gradient(135deg, rgba(255,153,51,0.06), rgba(19,136,8,0.06));
+  border: 1px solid rgba(255,153,51,0.2); border-radius: 8px;
+  padding: 14px; margin-bottom: 14px;
+}
+.isro-hindi-title {
+  font-size: 16px; color: #ff9933; margin-bottom: 8px; line-height: 1.5;
+  font-weight: 600;
+}
+.isro-hindi-text { font-size: 13px; color: var(--text); line-height: 1.7; margin-bottom: 6px; }
+.isro-hindi-sub { font-size: 9px; color: var(--text-faint); line-height: 1.5; font-style: italic; }
+
+.isro-live-label {
+  font-size: 9px; letter-spacing: 0.15em; color: var(--accent-2);
+  margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--border);
+}
+.isro-live-item {
+  font-size: 10px; color: var(--text-dim); padding: 7px 0;
+  border-bottom: 1px solid var(--border); cursor: pointer; transition: color 0.13s;
+  letter-spacing: 0.03em;
+}
+.isro-live-item:hover { color: var(--accent); }
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE — hide feature panels behind bottom nav
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .feature-panel { width: calc(100vw - 20px); right: 10px !important; top: 58px; max-height: calc(100vh - 130px); }
+  .header-btn-label { display: none; }
+  .header-icon-btn { padding: 5px 8px; margin-left: 4px; }
+}
