@@ -961,13 +961,41 @@ function selectSatellite(listIdx) {
   document.getElementById('tleLine2').textContent = sat.tle2;
 
   const badges = document.getElementById('panelBadges');
+  const isBookmarked = bookmarks.has(sat.norad);
   badges.innerHTML = `
     <span class="badge ${getBadgeClass(orbitType)}">${orbitType}</span>
     <span class="badge badge-type">${sat.cat.toUpperCase()}</span>
+    <button class="panel-action-btn bookmark-btn ${isBookmarked ? 'bookmarked' : ''}" id="panelBookmarkBtn" title="${isBookmarked ? 'Remove bookmark' : 'Bookmark'}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="${isBookmarked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+      ${isBookmarked ? 'SAVED' : 'SAVE'}
+    </button>
+    <button class="panel-action-btn share-btn" id="panelShareBtn" title="Share">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      SHARE
+    </button>
+    <button class="panel-action-btn pass-btn" id="panelPassBtn" title="Predict passes over your location">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      PASSES
+    </button>
   `;
 
   document.getElementById('infoPanel').classList.add('open');
   drawMiniMap(sat);
+
+  // Wire up action buttons
+  document.getElementById('panelBookmarkBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleBookmark(sat);
+    selectSatellite(listIdx); // re-render badges
+  });
+  document.getElementById('panelShareBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    shareSatellite(sat, geo);
+  });
+  document.getElementById('panelPassBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openPassPredictor(sat);
+  });
 
   // Highlight list item
   document.querySelectorAll('.sat-list-item').forEach(el => {
@@ -1683,6 +1711,11 @@ async function init() {
     document.getElementById('loadingOverlay').classList.add('hidden');
   }, 800);
 
+  // Init new feature panels
+  initPassPredictor();
+  initBookmarks();
+  initISROPanel();
+
   // Fetch TLEs — awaited so autoSelectISS runs after build
   await fetchTLEs();
 }
@@ -2181,4 +2214,557 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initMobileUI);
 } else {
   initMobileUI();
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  FEATURE 1 — ISS PASS PREDICTOR                                 ║
+// ║  Uses observer GPS + satellite.js to find visible passes         ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+const passState = {
+  observerLat: null,
+  observerLon: null,
+  observerAlt: 0.1,   // km above sea level
+  currentSat: null,
+  locationName: ''
+};
+
+function initPassPredictor() {
+  const panel    = document.getElementById('passPanel');
+  const closeBtn = document.getElementById('passClose');
+  const locBtn   = document.getElementById('passLocBtn');
+  const manualLatEl = document.getElementById('passManualLat');
+  const manualLonEl = document.getElementById('passManualLon');
+  const manualBtn   = document.getElementById('passManualBtn');
+
+  if (!panel) return;
+
+  closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+
+  // GPS button
+  locBtn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation not supported');
+      return;
+    }
+    locBtn.textContent = 'LOCATING…';
+    locBtn.disabled = true;
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        passState.observerLat = pos.coords.latitude;
+        passState.observerLon = pos.coords.longitude;
+        passState.observerAlt = (pos.coords.altitude || 0) / 1000;
+        passState.locationName = `${pos.coords.latitude.toFixed(2)}°, ${pos.coords.longitude.toFixed(2)}°`;
+        document.getElementById('passLocationLabel').textContent = `📍 ${passState.locationName}`;
+        locBtn.textContent = '📍 LOCATED';
+        locBtn.disabled = false;
+        if (passState.currentSat) computePasses(passState.currentSat);
+      },
+      err => {
+        showToast('Location denied — enter manually');
+        locBtn.textContent = '📍 USE MY LOCATION';
+        locBtn.disabled = false;
+      },
+      { timeout: 8000 }
+    );
+  });
+
+  // Manual coordinates
+  manualBtn.addEventListener('click', () => {
+    const lat = parseFloat(manualLatEl.value);
+    const lon = parseFloat(manualLonEl.value);
+    if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      showToast('Invalid coordinates');
+      return;
+    }
+    passState.observerLat = lat;
+    passState.observerLon = lon;
+    passState.observerAlt = 0.1;
+    passState.locationName = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+    document.getElementById('passLocationLabel').textContent = `📍 ${passState.locationName}`;
+    if (passState.currentSat) computePasses(passState.currentSat);
+  });
+
+  // Quick-set India cities
+  document.querySelectorAll('.pass-city-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      passState.observerLat = parseFloat(btn.dataset.lat);
+      passState.observerLon = parseFloat(btn.dataset.lon);
+      passState.observerAlt = 0.1;
+      passState.locationName = btn.textContent;
+      document.getElementById('passLocationLabel').textContent = `📍 ${passState.locationName}`;
+      manualLatEl.value = passState.observerLat;
+      manualLonEl.value = passState.observerLon;
+      document.querySelectorAll('.pass-city-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (passState.currentSat) computePasses(passState.currentSat);
+    });
+  });
+}
+
+function openPassPredictor(sat) {
+  const panel = document.getElementById('passPanel');
+  if (!panel) return;
+  passState.currentSat = sat;
+  document.getElementById('passSatName').textContent = sat.name;
+  document.getElementById('passSatCat').textContent = sat.cat.toUpperCase();
+  document.getElementById('passResults').innerHTML = `<div class="pass-hint">Set your location above, then passes compute automatically.</div>`;
+  panel.classList.add('open');
+  if (passState.observerLat !== null) computePasses(sat);
+}
+
+function computePasses(sat) {
+  if (passState.observerLat === null) return;
+
+  const resultsEl = document.getElementById('passResults');
+  resultsEl.innerHTML = '<div class="pass-loading"><div class="pass-spinner"></div>Computing passes…</div>';
+
+  // Run in a short timeout so the UI updates first
+  setTimeout(() => {
+    const passes = findPasses(sat, passState.observerLat, passState.observerLon, passState.observerAlt, 48);
+    if (passes.length === 0) {
+      resultsEl.innerHTML = `<div class="pass-hint">No visible passes found in the next 48 hours. The satellite may be in a polar or equatorial orbit that doesn't pass over your location.</div>`;
+      return;
+    }
+
+    resultsEl.innerHTML = '';
+    passes.forEach((p, i) => {
+      const card = document.createElement('div');
+      card.className = `pass-card ${p.maxEl >= 60 ? 'pass-excellent' : p.maxEl >= 30 ? 'pass-good' : 'pass-low'}`;
+      const riseTime = formatPassTime(p.riseTime);
+      const setTime  = formatPassTime(p.setTime);
+      const durationMin = Math.round((p.setTime - p.riseTime) / 60000);
+      const quality = p.maxEl >= 60 ? '🌟 EXCELLENT' : p.maxEl >= 30 ? '✅ GOOD' : '👁 LOW';
+      card.innerHTML = `
+        <div class="pass-card-header">
+          <span class="pass-number">#${i+1}</span>
+          <span class="pass-quality">${quality}</span>
+          <span class="pass-duration">${durationMin} min</span>
+        </div>
+        <div class="pass-card-times">
+          <div class="pass-time-row">
+            <span class="pass-time-label">RISES</span>
+            <span class="pass-time-val">${riseTime.date} <strong>${riseTime.time}</strong></span>
+            <span class="pass-az">${bearingLabel(p.riseAz)}</span>
+          </div>
+          <div class="pass-time-row">
+            <span class="pass-time-label">PEAK</span>
+            <span class="pass-time-val"><strong>${riseTime.date}</strong></span>
+            <span class="pass-el">MAX ${Math.round(p.maxEl)}°</span>
+          </div>
+          <div class="pass-time-row">
+            <span class="pass-time-label">SETS</span>
+            <span class="pass-time-val">${setTime.date} <strong>${setTime.time}</strong></span>
+            <span class="pass-az">${bearingLabel(p.setAz)}</span>
+          </div>
+        </div>
+        <button class="pass-share-btn" onclick="sharePass('${sat.name}','${riseTime.date}','${riseTime.time}',${Math.round(p.maxEl)})">
+          Share This Pass 🚀
+        </button>`;
+      resultsEl.appendChild(card);
+    });
+  }, 30);
+}
+
+// Core pass-finding algorithm using satellite.js observer geometry
+function findPasses(sat, lat, lon, altKm, hoursAhead) {
+  const DEG = Math.PI / 180;
+  const now      = Date.now();
+  const endTime  = now + hoursAhead * 3600 * 1000;
+  const stepMs   = 20000;   // 20-second coarse step
+  const MIN_EL   = 5;       // degrees — anything below is below horizon
+
+  const observerGd = {
+    latitude:  lat  * DEG,
+    longitude: lon  * DEG,
+    height:    altKm
+  };
+
+  const passes = [];
+  let inPass = false;
+  let passRise = null, passRiseAz = 0, passSetAz = 0;
+  let maxEl = 0, peakTime = null;
+  let t = now;
+
+  while (t < endTime) {
+    const date = new Date(t);
+    let el = 0, az = 0;
+
+    try {
+      const pv   = satellite.propagate(sat.satrec, date);
+      if (pv && pv.position && pv.position !== true) {
+        const gmst = satellite.gstime(date);
+        const look  = satellite.ecfToLookAngles(observerGd, satellite.eciToEcf(pv.position, gmst));
+        el = look.elevation * (180 / Math.PI);
+        az = look.azimuth   * (180 / Math.PI);
+      }
+    } catch(e) {}
+
+    if (!inPass && el >= MIN_EL) {
+      inPass    = true;
+      passRise  = t;
+      passRiseAz= az;
+      maxEl     = el;
+      peakTime  = t;
+    } else if (inPass) {
+      if (el > maxEl) { maxEl = el; peakTime = t; }
+      if (el < MIN_EL) {
+        // Refine set time with 1-second steps
+        let ft = t - stepMs;
+        while (ft < t) {
+          try {
+            const pv2  = satellite.propagate(sat.satrec, new Date(ft));
+            if (pv2 && pv2.position && pv2.position !== true) {
+              const gmst2 = satellite.gstime(new Date(ft));
+              const lk    = satellite.ecfToLookAngles(observerGd, satellite.eciToEcf(pv2.position, gmst2));
+              passSetAz = lk.azimuth * (180 / Math.PI);
+            }
+          } catch(e) {}
+          ft += 1000;
+        }
+        passes.push({ riseTime: passRise, setTime: t, riseAz: passRiseAz, setAz: passSetAz, maxEl, peakTime });
+        inPass = false;
+        maxEl  = 0;
+        if (passes.length >= 8) break;
+      }
+    }
+    t += stepMs;
+  }
+  return passes;
+}
+
+function formatPassTime(ms) {
+  const d = new Date(ms);
+  const date = d.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+  const time = d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false });
+  return { date, time };
+}
+
+function bearingLabel(az) {
+  const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
+  return dirs[Math.round(az / 45) % 8];
+}
+
+function sharePass(satName, date, time, maxEl) {
+  const text = `🛰️ ${satName} will pass overhead!\n📅 ${date} at ${time}\n📡 Max elevation: ${maxEl}°\n\nTrack it live on ORBITAL 🌍\n#Satellite #Space #ORBITAL`;
+  const encoded = encodeURIComponent(text);
+  const twitterUrl = `https://twitter.com/intent/tweet?text=${encoded}`;
+  window.open(twitterUrl, '_blank', 'width=600,height=400');
+}
+
+window.sharePass = sharePass; // expose for inline onclick
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  FEATURE 2 — BOOKMARKS & SOCIAL SHARE                          ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+// Persisted in localStorage so bookmarks survive page refresh
+const bookmarks = new Set(JSON.parse(localStorage.getItem('orbital_bookmarks') || '[]'));
+
+function saveBookmarks() {
+  localStorage.setItem('orbital_bookmarks', JSON.stringify([...bookmarks]));
+}
+
+function toggleBookmark(sat) {
+  if (bookmarks.has(sat.norad)) {
+    bookmarks.delete(sat.norad);
+    showToast(`Removed ${sat.name} from bookmarks`);
+  } else {
+    bookmarks.add(sat.norad);
+    showToast(`Bookmarked ${sat.name} ⭐`);
+  }
+  saveBookmarks();
+  renderBookmarksList();
+}
+
+function initBookmarks() {
+  const panel   = document.getElementById('bookmarksPanel');
+  const openBtn = document.getElementById('btnBookmarks');
+  const closeBtn= document.getElementById('bookmarksClose');
+  if (!panel || !openBtn) return;
+
+  openBtn.addEventListener('click', () => {
+    panel.classList.toggle('open');
+    renderBookmarksList();
+  });
+  closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+  renderBookmarksList();
+}
+
+function renderBookmarksList() {
+  const el = document.getElementById('bookmarksList');
+  if (!el) return;
+  if (bookmarks.size === 0) {
+    el.innerHTML = `<div class="bm-empty">
+      <div class="bm-empty-icon">⭐</div>
+      <div>No bookmarks yet.<br>Click SAVE on any satellite.</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = '';
+  bookmarks.forEach(norad => {
+    const sat = state.satellites.find(s => s.norad === norad);
+    const name = sat ? sat.name : `NORAD ${norad}`;
+    const cat  = sat ? sat.cat  : 'other';
+    const div  = document.createElement('div');
+    div.className = 'bm-item';
+    div.innerHTML = `
+      <span class="bm-emoji">${getCategoryEmoji(cat)}</span>
+      <div class="bm-info">
+        <div class="bm-name">${name}</div>
+        <div class="bm-norad">#${norad}</div>
+      </div>
+      <div class="bm-actions">
+        <button class="bm-go" title="Go to satellite">→</button>
+        <button class="bm-rm" title="Remove">✕</button>
+      </div>`;
+    div.querySelector('.bm-go').addEventListener('click', () => {
+      if (!sat) { showToast('Load satellites first'); return; }
+      const filtered = getFilteredSats();
+      const idx = filtered.findIndex(s => s.norad === norad);
+      if (idx >= 0) { selectSatellite(idx); document.getElementById('bookmarksPanel').classList.remove('open'); }
+      else showToast('Switch to ALL filter first');
+    });
+    div.querySelector('.bm-rm').addEventListener('click', () => {
+      bookmarks.delete(norad); saveBookmarks(); renderBookmarksList();
+    });
+    el.appendChild(div);
+  });
+}
+
+function shareSatellite(sat, geo) {
+  const name = sat.name;
+  const lat  = geo.lat.toFixed(2);
+  const lon  = geo.lon.toFixed(2);
+  const alt  = Math.round(geo.alt);
+  const vel  = geo.vel.toFixed(1);
+  const text = `🛰️ I'm tracking ${name} right now!\n📍 Position: ${lat}°, ${lon}°\n🏔️ Altitude: ${alt} km\n⚡ Speed: ${vel} km/s\n\nWatch it live on ORBITAL 🌍\n#Satellite #Space #ORBITAL #ISRO`;
+  const encoded = encodeURIComponent(text);
+
+  // Share sheet — try native first, fall back to Twitter
+  if (navigator.share) {
+    navigator.share({ title: `Tracking ${name}`, text, url: window.location.href })
+      .catch(() => window.open(`https://twitter.com/intent/tweet?text=${encoded}`, '_blank'));
+  } else {
+    window.open(`https://twitter.com/intent/tweet?text=${encoded}`, '_blank', 'width=600,height=400');
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  FEATURE 3 — ISRO INDIA PANEL                                   ║
+// ║  Indian satellites, ISRO missions, PSLV launches                 ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+const ISRO_MISSIONS = [
+  {
+    name: 'Chandrayaan-3', icon: '🌙', status: 'SUCCESS',
+    launch: '14 Jul 2023', agency: 'ISRO',
+    desc: 'First spacecraft to land near the lunar south pole. Pragyan rover operated for 14 days.',
+    highlight: 'India became the 4th nation to land on the Moon and the 1st to reach the south pole.',
+    norad: null, cat: 'science', color: '#ffd700'
+  },
+  {
+    name: 'Aditya-L1', icon: '☀️', status: 'ACTIVE',
+    launch: '2 Sep 2023', agency: 'ISRO',
+    desc: 'India\'s first solar observatory. Stationed at Lagrange point L1, 1.5 million km from Earth.',
+    highlight: 'Studying solar wind, coronal mass ejections and space weather from L1 point.',
+    norad: '57422', cat: 'science', color: '#ff8c42'
+  },
+  {
+    name: 'PSLV-C58 / XPoSat', icon: '⭐', status: 'ACTIVE',
+    launch: '1 Jan 2024', agency: 'ISRO',
+    desc: 'India\'s first dedicated space observatory for studying X-ray polarimetry of cosmic sources.',
+    highlight: 'Only the 2nd X-ray polarimetry mission in the world after NASA\'s IXPE.',
+    norad: '58348', cat: 'science', color: '#c084fc'
+  },
+  {
+    name: 'GSAT-20 / CMS-03', icon: '📡', status: 'ACTIVE',
+    launch: '18 Nov 2024', agency: 'ISRO/SpaceX',
+    desc: 'High-throughput communication satellite launched on SpaceX Falcon 9 for broadband India.',
+    highlight: 'First major ISRO payload launched on a foreign commercial rocket.',
+    norad: null, cat: 'comm', color: '#00c8ff'
+  },
+  {
+    name: 'Mangalyaan (MOM)', icon: '🔴', status: 'ENDED',
+    launch: '5 Nov 2013', agency: 'ISRO',
+    desc: 'India\'s first interplanetary mission. Mars Orbiter Mission exceeded planned 6-month life by years.',
+    highlight: 'India became the first nation to succeed Mars orbit insertion on first attempt.',
+    norad: null, cat: 'science', color: '#ff4444'
+  },
+  {
+    name: 'Chandrayaan-2', icon: '🌙', status: 'PARTIAL',
+    launch: '22 Jul 2019', agency: 'ISRO',
+    desc: 'Orbiter remains operational; lander Vikram crash-landed. Orbiter still provides lunar data.',
+    highlight: 'Orbiter has mapped the Moon with unprecedented resolution including south pole.',
+    norad: '44441', cat: 'science', color: '#aabb44'
+  },
+  {
+    name: 'RISAT-2BR1', icon: '🔍', status: 'ACTIVE',
+    launch: '11 Dec 2019', agency: 'ISRO',
+    desc: 'Radar Imaging Satellite for Earth observation including agriculture, flood, border monitoring.',
+    highlight: 'Sub-meter resolution SAR satellite for national security and disaster management.',
+    norad: '44857', cat: 'other', color: '#00ff9d'
+  },
+  {
+    name: 'Cartosat-3', icon: '🗺️', status: 'ACTIVE',
+    launch: '27 Nov 2019', agency: 'ISRO',
+    desc: 'High-resolution Earth observation satellite with 25cm panchromatic resolution.',
+    highlight: 'Highest resolution civilian satellite from India — used for urban planning & defence.',
+    norad: '44793', cat: 'other', color: '#4ecdc4'
+  },
+  {
+    name: 'NavIC / IRNSS', icon: '🧭', status: 'ACTIVE',
+    launch: '2013–2018', agency: 'ISRO',
+    desc: 'India\'s own navigation satellite system. 7-satellite constellation covering India + 1500km radius.',
+    highlight: 'India is one of only 5 countries with its own independent navigation satellite system.',
+    norad: null, cat: 'gnss', color: '#ff6b35'
+  },
+  {
+    name: 'GSAT-11 (Dream Sat)', icon: '🌐', status: 'ACTIVE',
+    launch: '5 Dec 2018', agency: 'ISRO',
+    desc: 'Heaviest satellite built by India. 5.8-tonne multi-beam broadband communication satellite.',
+    highlight: 'Provides broadband speeds of 14 Gbps to Indian mainland and islands.',
+    norad: '43864', cat: 'comm', color: '#00c8ff'
+  }
+];
+
+const UPCOMING_LAUNCHES = [
+  { name: 'NISAR', date: 'Early 2025', rocket: 'GSLV Mk-II', desc: 'Joint NASA-ISRO Earth observation SAR mission — most expensive Earth science satellite ever.', flag: '🇮🇳🇺🇸' },
+  { name: 'Gaganyaan (Uncrewed)', date: '2025', rocket: 'LVM3', desc: 'Test flight for India\'s first crewed spacecraft without astronauts.', flag: '🇮🇳' },
+  { name: 'PSLV-C61', date: '2025', rocket: 'PSLV-XL', desc: 'Multiple commercial & research payloads from India and international clients.', flag: '🇮🇳' },
+  { name: 'Chandrayaan-4', date: '2026–27', rocket: 'LVM3', desc: 'Lunar sample-return mission. Will collect and bring back Moon rock to Earth.', flag: '🇮🇳' },
+  { name: 'Gaganyaan (Crewed)', date: '2026', rocket: 'LVM3', desc: 'India\'s first crewed spaceflight. 3 Vyomanauts to low Earth orbit.', flag: '🇮🇳👨‍🚀' },
+  { name: 'Shukrayaan-1', date: '2028', rocket: 'LVM3', desc: 'Venus Orbiter Mission — studying Venus atmosphere and surface.', flag: '🇮🇳' },
+];
+
+function initISROPanel() {
+  const panel   = document.getElementById('isroPanel');
+  const openBtn = document.getElementById('btnISRO');
+  const closeBtn= document.getElementById('isroClose');
+  if (!panel || !openBtn) return;
+
+  openBtn.addEventListener('click', () => {
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) renderISROContent();
+  });
+  closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+
+  // Tab switching
+  document.querySelectorAll('.isro-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.isro-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.isro-tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(`isroTab_${tab.dataset.tab}`).classList.add('active');
+    });
+  });
+}
+
+function renderISROContent() {
+  // Missions tab
+  const missionsEl = document.getElementById('isroTab_missions');
+  if (missionsEl && !missionsEl.dataset.rendered) {
+    missionsEl.dataset.rendered = '1';
+    missionsEl.innerHTML = '';
+    ISRO_MISSIONS.forEach(m => {
+      const card = document.createElement('div');
+      card.className = 'isro-mission-card';
+      card.style.setProperty('--mc', m.color);
+      const statusClass = { SUCCESS:'status-success', ACTIVE:'status-active', ENDED:'status-ended', PARTIAL:'status-partial' }[m.status] || 'status-active';
+      card.innerHTML = `
+        <div class="isro-card-header">
+          <span class="isro-mission-icon">${m.icon}</span>
+          <div class="isro-mission-meta">
+            <div class="isro-mission-name">${m.name}</div>
+            <div class="isro-mission-sub">${m.agency} · ${m.launch}</div>
+          </div>
+          <span class="isro-status ${statusClass}">${m.status}</span>
+        </div>
+        <div class="isro-mission-desc">${m.desc}</div>
+        <div class="isro-mission-highlight">💡 ${m.highlight}</div>
+        ${m.norad ? `<button class="isro-track-btn" data-norad="${m.norad}">🛰️ TRACK THIS SATELLITE</button>` : ''}`;
+      card.querySelector('.isro-track-btn')?.addEventListener('click', () => {
+        const filtered = getFilteredSats();
+        const idx = filtered.findIndex(s => s.norad === m.norad);
+        if (idx >= 0) { selectSatellite(idx); document.getElementById('isroPanel').classList.remove('open'); }
+        else showToast('Switch filter to ALL first');
+      });
+      missionsEl.appendChild(card);
+    });
+  }
+
+  // Launches tab
+  const launchesEl = document.getElementById('isroTab_launches');
+  if (launchesEl && !launchesEl.dataset.rendered) {
+    launchesEl.dataset.rendered = '1';
+    launchesEl.innerHTML = '';
+    UPCOMING_LAUNCHES.forEach(l => {
+      const card = document.createElement('div');
+      card.className = 'isro-launch-card';
+      card.innerHTML = `
+        <div class="isro-launch-header">
+          <span class="isro-launch-flag">${l.flag}</span>
+          <div>
+            <div class="isro-launch-name">${l.name}</div>
+            <div class="isro-launch-rocket">${l.rocket}</div>
+          </div>
+          <span class="isro-launch-date">${l.date}</span>
+        </div>
+        <div class="isro-launch-desc">${l.desc}</div>`;
+      launchesEl.appendChild(card);
+    });
+  }
+
+  // Stats tab
+  const statsEl = document.getElementById('isroTab_stats');
+  if (statsEl && !statsEl.dataset.rendered) {
+    statsEl.dataset.rendered = '1';
+    const isroSats = state.satellites.filter(s => {
+      const n = s.name.toUpperCase();
+      return n.includes('CARTOSAT') || n.includes('RISAT') || n.includes('RESOURCESAT') ||
+             n.includes('GSAT') || n.includes('IRNSS') || n.includes('NAVIC') ||
+             n.includes('INSAT') || n.includes('SARAL') || n.includes('OCEANSAT') ||
+             n.includes('EMISAT') || n.includes('MICROSAT');
+    });
+    statsEl.innerHTML = `
+      <div class="isro-stats-grid">
+        <div class="isro-stat-card">
+          <div class="isro-stat-num" style="color:#ffd700">100+</div>
+          <div class="isro-stat-label">Satellites Launched</div>
+        </div>
+        <div class="isro-stat-card">
+          <div class="isro-stat-num" style="color:#00ff9d">57+</div>
+          <div class="isro-stat-label">PSLV Launches</div>
+        </div>
+        <div class="isro-stat-card">
+          <div class="isro-stat-num" style="color:#00c8ff">${isroSats.length}</div>
+          <div class="isro-stat-label">ISRO Sats Tracked Now</div>
+        </div>
+        <div class="isro-stat-card">
+          <div class="isro-stat-num" style="color:#c084fc">4th</div>
+          <div class="isro-stat-label">Nation on the Moon</div>
+        </div>
+        <div class="isro-stat-card">
+          <div class="isro-stat-num" style="color:#ff8c42">1st</div>
+          <div class="isro-stat-label">Mars on 1st Attempt</div>
+        </div>
+        <div class="isro-stat-card">
+          <div class="isro-stat-num" style="color:#ff4444">2047</div>
+          <div class="isro-stat-label">India Space Station</div>
+        </div>
+      </div>
+      <div class="isro-hindi-section">
+        <div class="isro-hindi-title">भारत का अंतरिक्ष मिशन</div>
+        <div class="isro-hindi-text">इसरो — भारतीय अंतरिक्ष अनुसंधान संगठन। चंद्रयान, मंगलयान और गगनयान के साथ भारत अंतरिक्ष में नई ऊंचाइयां छू रहा है।</div>
+        <div class="isro-hindi-sub">India is reaching new heights in space with Chandrayaan, Mangalyaan, and Gaganyaan.</div>
+      </div>
+      ${isroSats.length > 0 ? `
+      <div class="isro-live-sats">
+        <div class="isro-live-label">🟢 ISRO SATELLITES LIVE NOW</div>
+        ${isroSats.slice(0,8).map((s,i) => `
+          <div class="isro-live-item" onclick="(() => { const f=getFilteredSats(); const idx=f.findIndex(x=>x.norad==='${s.norad}'); if(idx>=0)selectSatellite(idx); document.getElementById('isroPanel').classList.remove('open'); })()">
+            ${getCategoryEmoji(s.cat)} ${s.name}
+          </div>`).join('')}
+      </div>` : ''}`;
+  }
 }
