@@ -16,13 +16,13 @@ const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 const TLE_CACHE_KEY = 'orbital_tle_cache';
 const TLE_CACHE_TS_KEY = 'orbital_tle_cache_ts';
 const TLE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const DOM_UPDATE_INTERVAL_MS = 250;
 const IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
 const TLE_FETCH_TIMEOUT_MS = 6000;
 const TLE_LOAD_HARD_CAP_MS = 4500;
 const TLE_MAX_PARSE = IS_MOBILE ? 1200 : 2500;
 const TLE_MAX_RENDER = IS_MOBILE ? 600 : 1500;
 const TLE_RETRY_ATTEMPTS = 3;
+const LOADER_MIN_MS = 2500;
 
 function devLog(...args) {
   if (window.ORBITAL_CONFIG?.DEV) console.log('[ORBITAL]', ...args);
@@ -50,9 +50,9 @@ const state = {
   animFrameId: null,
   tleLoaded: false,
   lastListItems: [],
-  lastDOMUpdate: 0,
-  isTabVisible: true,
-  cameraFly: null
+  appStartTime: 0,
+  _loaderHideTimer: null,
+  _loaderHidden: false
 };
 
 // ============================================================
@@ -161,8 +161,7 @@ function initThree() {
 
   state.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   state.renderer.setSize(window.innerWidth, window.innerHeight);
-  const maxDpr = IS_MOBILE ? 1.5 : 2;
-  state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDpr));
+  state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   state.renderer.outputEncoding = THREE.sRGBEncoding;
 
   state.clock = new THREE.Clock();
@@ -535,8 +534,7 @@ function buildEarth() {
   const tLoader = new THREE.TextureLoader();
 
   // Earth sphere
-  const earthSegments = IS_MOBILE ? 64 : 128;
-  const geo = new THREE.SphereGeometry(EARTH_RADIUS_3D, earthSegments, earthSegments);
+  const geo = new THREE.SphereGeometry(EARTH_RADIUS_3D, 128, 128);
 
   // Load real NASA Blue Marble texture via CDN proxy
   const earthTex = tLoader.load(
@@ -926,7 +924,6 @@ function trackSatelliteByNorad(norad, missionName) {
   if (idx >= 0) {
     document.getElementById('isroPanel')?.classList.remove('open');
     selectSatellite(idx);
-    flyCameraToSatellite(idx, 2000);
   }
 }
 
@@ -1087,56 +1084,6 @@ function deselectSatellite() {
   document.querySelectorAll('.sat-list-item').forEach(el => el.classList.remove('selected'));
 }
 
-// Fix 5: Auto-select ISS on first load so the panel isn't empty
-function flyCameraToSatellite(listIdx, durationMs = 2000) {
-  const filtered = getFilteredSats();
-  const sat = filtered[listIdx];
-  if (!sat) return;
-  const geo = sat._lastGeo || propagateToGeodetic(sat.satrec, new Date());
-  if (!geo) return;
-
-  const targetPos = geoTo3D(geo.lat, geo.lon, geo.alt);
-  const offset = targetPos.clone().normalize().multiplyScalar(0.55);
-  const endCam = targetPos.clone().add(offset);
-
-  state.cameraFly = {
-    startTime: performance.now(),
-    duration: durationMs,
-    startPos: state.camera.position.clone(),
-    endPos: endCam,
-    startTarget: state.orbitControls.target.clone(),
-    endTarget: targetPos.clone()
-  };
-  state.orbitControls.autoRotate = false;
-}
-
-function updateCameraFly() {
-  if (!state.cameraFly) return false;
-  const t = Math.min(1, (performance.now() - state.cameraFly.startTime) / state.cameraFly.duration);
-  const ease = t * t * (3 - 2 * t);
-  state.camera.position.lerpVectors(state.cameraFly.startPos, state.cameraFly.endPos, ease);
-  state.orbitControls.target.lerpVectors(state.cameraFly.startTarget, state.cameraFly.endTarget, ease);
-  state.orbitControls.spherical.setFromVector3(
-    state.camera.position.clone().sub(state.orbitControls.target)
-  );
-  state.camera.lookAt(state.orbitControls.target);
-  if (t >= 1) state.cameraFly = null;
-  return !!state.cameraFly;
-}
-
-function autoSelectISS() {
-  const filtered = getFilteredSats();
-  const issIdx = filtered.findIndex(s =>
-    s.name.toUpperCase().includes('ISS') || s.name.toUpperCase().includes('ZARYA')
-  );
-  if (issIdx >= 0) {
-    setTimeout(() => {
-      selectSatellite(issIdx);
-      flyCameraToSatellite(issIdx, 2000);
-    }, 400);
-  }
-}
-
 // ============================================================
 // MINI MAP (ground track)
 // ============================================================
@@ -1269,10 +1216,8 @@ function updateFollowMode() {
 // ============================================================
 function animate() {
   state.animFrameId = requestAnimationFrame(animate);
-  if (!state.isTabVisible) return;
 
   const elapsed = state.clock.getElapsedTime();
-  const nowMs = performance.now();
 
   // Stars twinkle
   if (state.starfield) state.starfield.material.uniforms.time.value = elapsed;
@@ -1285,17 +1230,15 @@ function animate() {
   if (state.atmo) state.atmo.rotation.y = elapsed * 0.0003;
 
   // Update controls or follow
-  if (state.cameraFly) updateCameraFly();
-  else if (state.followMode) updateFollowMode();
+  if (state.followMode) updateFollowMode();
   else updateOrbitControls();
 
   // Update satellite positions (every frame is fine for <2000 sats)
   if (state.tleLoaded) {
     updateSatellitePositions();
 
-    // Throttle DOM updates — avoid 60fps textContent writes
-    if (state.selectedIndex >= 0 && nowMs - state.lastDOMUpdate >= DOM_UPDATE_INTERVAL_MS) {
-      state.lastDOMUpdate = nowMs;
+    // Update info panel live if open
+    if (state.selectedIndex >= 0) {
       const filtered = getFilteredSats();
       const sat = filtered[state.selectedIndex];
       if (sat && sat._lastGeo) {
@@ -1304,18 +1247,15 @@ function animate() {
         document.getElementById('dAlt').textContent = `${Math.round(sat._lastGeo.alt).toLocaleString()} km`;
         document.getElementById('dVel').textContent = `${sat._lastGeo.vel.toFixed(2)} km/s`;
 
-        // Mini map refresh (~every 4 DOM ticks)
-        if (Math.round(nowMs / DOM_UPDATE_INTERVAL_MS) % 4 === 0) drawMiniMap(sat);
+        // Mini map refresh (every 60 frames)
+        if (Math.round(elapsed * 60) % 60 === 0) drawMiniMap(sat);
       }
     }
   }
 
-  // UTC clock (once per second is enough)
-  if (Math.floor(elapsed) !== state._lastUtcSec) {
-    state._lastUtcSec = Math.floor(elapsed);
-    const now = new Date();
-    document.getElementById('utcTime').textContent = `UTC ${now.toUTCString().slice(17, 25)}`;
-  }
+  // UTC clock
+  const now = new Date();
+  document.getElementById('utcTime').textContent = `UTC ${now.toUTCString().slice(17, 25)}`;
 
   state.renderer.render(state.scene, state.camera);
 }
@@ -1357,7 +1297,20 @@ function setConnectionStatus(mode, count, extra) {
 }
 
 function hideLoadingOverlay() {
-  document.getElementById('loadingOverlay')?.classList.add('hidden');
+  if (state._loaderHidden) return;
+  const wait = Math.max(0, LOADER_MIN_MS - (performance.now() - state.appStartTime));
+  clearTimeout(state._loaderHideTimer);
+  state._loaderHideTimer = setTimeout(() => {
+    state._loaderHidden = true;
+    document.getElementById('loadingOverlay')?.classList.add('hidden');
+  }, wait);
+}
+
+function showLoadingOverlay() {
+  clearTimeout(state._loaderHideTimer);
+  state._loaderHidden = false;
+  state.appStartTime = performance.now();
+  document.getElementById('loadingOverlay')?.classList.remove('hidden');
 }
 
 function trimTleRaw(raw, maxSats) {
@@ -1440,7 +1393,7 @@ async function loadBundledTle() {
 }
 
 function applyTleRaw(raw, sourceMeta = {}) {
-  const { source = 'unknown', silent = false, skipIss = false } = sourceMeta;
+  const { source = 'unknown', silent = false } = sourceMeta;
   const trimmed = trimTleRaw(raw, TLE_MAX_PARSE);
   setLoading('Parsing satellite data…', 70);
   state.satellites = parseTLEs(trimmed);
@@ -1465,7 +1418,6 @@ function applyTleRaw(raw, sourceMeta = {}) {
         ? 'Using cached satellite data'
         : 'Using bundled satellite data (offline mode)';
     showToast(msg);
-    if (!skipIss) autoSelectISS();
   }
 
   // ISRO stats tab may need refresh when data arrives
@@ -1503,13 +1455,13 @@ async function fetchTLEs(options = {}) {
     }
 
     if (myGen !== state.tleFetchGen) return;
-    applyTleRaw(raw, { source, silent: background, skipIss: background });
+    applyTleRaw(raw, { source, silent: background });
 
     if (forceRefresh || background) {
       const live = await fetchLiveTleWithRetry();
       if (live && myGen === state.tleFetchGen) {
         cacheTleRaw(live);
-        applyTleRaw(live, { source: 'live', silent: !forceRefresh, skipIss: background });
+        applyTleRaw(live, { source: 'live', silent: !forceRefresh });
       } else if (forceRefresh && myGen === state.tleFetchGen) {
         showToast('Live refresh failed — keeping current data');
       }
@@ -1517,7 +1469,7 @@ async function fetchTLEs(options = {}) {
       fetchLiveTleWithRetry().then(live => {
         if (!live || myGen !== state.tleFetchGen) return;
         cacheTleRaw(live);
-        applyTleRaw(live, { source: 'live', silent: true, skipIss: true });
+        applyTleRaw(live, { source: 'live', silent: true });
         showToast('Live satellite data updated');
       }).catch(() => {});
     }
@@ -1890,7 +1842,7 @@ function initControls() {
 
   document.getElementById('btnRefresh').addEventListener('click', async () => {
     showToast('Refreshing TLE data…');
-    document.getElementById('loadingOverlay')?.classList.remove('hidden');
+    showLoadingOverlay();
     state.tleLoaded = false;
     await fetchTLEs({ forceRefresh: true });
   });
@@ -1924,6 +1876,8 @@ function onResize() {
 // INIT  — Fix 2: UI shell visible immediately, data loads async
 // ============================================================
 async function init() {
+  state.appStartTime = performance.now();
+  state._loaderHidden = false;
   setLoading('Initializing 3D engine...', 5);
 
   // Three.js setup — synchronous, fast
@@ -1934,10 +1888,6 @@ async function init() {
   // Events
   window.addEventListener('resize', onResize);
   window.addEventListener('click', onCanvasClick);
-  document.addEventListener('visibilitychange', () => {
-    state.isTabVisible = !document.hidden;
-    if (state.isTabVisible && state.clock) state.clock.getDelta();
-  });
   initSearch();
   initControls();
 
