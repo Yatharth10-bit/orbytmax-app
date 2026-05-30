@@ -1502,3 +1502,492 @@ init().catch(err => {
   document.getElementById('loadingMsg').textContent = 'Error loading. Check console.';
   document.getElementById('statusDot').classList.add('error');
 });
+
+// ============================================================
+// AI COPILOT — powered by Anthropic API (no key required)
+// ============================================================
+const copilot = {
+  open: false,
+  loading: false,
+  messages: []   // { role, content }
+};
+
+const ANTHROPIC_URL  = 'https://api.anthropic.com/v1/messages';
+const COPILOT_MODEL  = 'claude-sonnet-4-20250514';
+
+const SYSTEM_PROMPT = `You are ORBITAL AI, an expert space and satellite tracking assistant embedded in a real-time satellite tracker application called ORBITAL by Yatharth.
+
+You have deep knowledge of:
+- Orbital mechanics (Kepler's laws, orbital elements, TLE data format, SGP4/SDP4 propagation)
+- Satellite categories: ISS, Starlink, GPS/GNSS constellations, weather satellites, scientific missions
+- Orbit types: LEO (Low Earth Orbit <2000km), MEO (Medium 2000-35000km), GEO (Geostationary ~35786km), HEO (Highly Elliptical)
+- Space debris, Kessler syndrome, orbital decay, reentry
+- Real-world satellite missions, constellations, and their purposes
+
+Keep answers concise, technical but accessible. Use **bold** for key terms. Use bullet points for lists. Keep responses under 220 words unless the question truly demands more. When live satellite context is provided, use it to give specific answers about that satellite.`;
+
+function getCopilotContext() {
+  const filtered = getFilteredSats();
+  if (state.selectedIndex >= 0 && filtered[state.selectedIndex]) {
+    const sat = filtered[state.selectedIndex];
+    const geo = sat._lastGeo;
+    if (geo) {
+      return `\n\n[LIVE CONTEXT] Selected satellite: ${sat.name} (NORAD #${sat.norad}), Category: ${sat.cat.toUpperCase()}, Orbit: ${getOrbitType(geo.alt)}, Altitude: ${Math.round(geo.alt)} km, Lat: ${geo.lat.toFixed(2)}°, Lon: ${geo.lon.toFixed(2)}°, Velocity: ${geo.vel.toFixed(2)} km/s, Inclination: ${(sat.satrec.inclo * 180 / Math.PI).toFixed(2)}°`;
+    }
+    return `\n\n[LIVE CONTEXT] Selected satellite: ${sat.name} (NORAD #${sat.norad}), Category: ${sat.cat.toUpperCase()}`;
+  }
+  return `\n\n[LIVE CONTEXT] Currently tracking ${state.satellites.length.toLocaleString()} satellites. Active filter: ${state.activeFilter}. No satellite selected.`;
+}
+
+function initCopilot() {
+  const fab      = document.getElementById('copilotFab');
+  const closeBtn = document.getElementById('copilotClose');
+  const clearBtn = document.getElementById('copilotClear');
+  const input    = document.getElementById('copilotInput');
+  const sendBtn  = document.getElementById('copilotSend');
+
+  // Hide the API key bar — not needed
+  const keyBar = document.getElementById('copilotKeyBar');
+  if (keyBar) keyBar.classList.add('hidden');
+
+  fab.addEventListener('click', () => toggleCopilot());
+  closeBtn.addEventListener('click', () => toggleCopilot(false));
+
+  clearBtn.addEventListener('click', () => {
+    copilot.messages = [];
+    const msgs = document.getElementById('copilotMessages');
+    msgs.innerHTML = '';
+    const welcome = buildWelcome();
+    if (welcome) msgs.appendChild(welcome);
+  });
+
+  sendBtn.addEventListener('click', sendCopilotMessage);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCopilotMessage(); }
+  });
+
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+  });
+
+  document.querySelectorAll('.copilot-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      input.value = chip.dataset.q;
+      sendCopilotMessage();
+    });
+  });
+}
+
+function toggleCopilot(force) {
+  const panel = document.getElementById('copilotPanel');
+  const fab   = document.getElementById('copilotFab');
+  copilot.open = force !== undefined ? force : !copilot.open;
+  panel.classList.toggle('open', copilot.open);
+  fab.classList.toggle('open', copilot.open);
+  if (copilot.open) document.getElementById('copilotInput').focus();
+}
+
+function setStatus(txt) {
+  document.getElementById('copilotStatus').textContent = txt;
+}
+
+function buildWelcome() {
+  const existing = document.querySelector('.copilot-welcome');
+  return existing ? existing.cloneNode(true) : null;
+}
+
+async function sendCopilotMessage() {
+  if (copilot.loading) return;
+  const input = document.getElementById('copilotInput');
+  const text  = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  const welcome = document.querySelector('.copilot-welcome');
+  if (welcome) welcome.style.display = 'none';
+
+  appendMessage('user', text);
+  copilot.messages.push({ role: 'user', content: text });
+
+  const typingEl = appendTyping();
+  copilot.loading = true;
+  document.getElementById('copilotSend').disabled = true;
+  setStatus('Thinking...');
+
+  try {
+    const sysContent = SYSTEM_PROMPT + getCopilotContext();
+
+    const res = await fetch(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: COPILOT_MODEL,
+        max_tokens: 600,
+        system: sysContent,
+        stream: true,
+        messages: copilot.messages.slice(-14)
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${res.status}`);
+    }
+
+    typingEl.remove();
+    const { bubble } = appendMessage('ai', '');
+    bubble.innerHTML = '<span class="copilot-cursor"></span>';
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText  = '';
+    let buffer    = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (!data || data === '[DONE]') continue;
+        try {
+          const json = JSON.parse(data);
+          // Anthropic streaming events
+          if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+            fullText += json.delta.text;
+            bubble.innerHTML = formatCopilotMarkdown(fullText) + '<span class="copilot-cursor"></span>';
+            scrollCopilotToBottom();
+          }
+        } catch (_) {}
+      }
+    }
+
+    bubble.innerHTML = formatCopilotMarkdown(fullText);
+    copilot.messages.push({ role: 'assistant', content: fullText });
+    setStatus('Powered by Claude');
+
+  } catch (err) {
+    typingEl.remove();
+    const { bubble } = appendMessage('ai', '');
+    bubble.classList.add('copilot-error');
+    bubble.textContent = `Error: ${err.message}`;
+    setStatus('Error — please retry');
+    console.error('[Copilot]', err);
+  } finally {
+    copilot.loading = false;
+    document.getElementById('copilotSend').disabled = false;
+    scrollCopilotToBottom();
+  }
+}
+
+function appendMessage(role, text) {
+  const msgs = document.getElementById('copilotMessages');
+  const wrap = document.createElement('div');
+  wrap.className = `copilot-msg ${role}`;
+
+  if (role === 'ai' && state.selectedIndex >= 0) {
+    const sat = getFilteredSats()[state.selectedIndex];
+    if (sat) {
+      const badge = document.createElement('div');
+      badge.className = 'copilot-ctx-badge';
+      badge.innerHTML = `🛰️ ${sat.name}`;
+      wrap.appendChild(badge);
+    }
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'copilot-bubble';
+  bubble.innerHTML = role === 'user' ? escapeHtml(text) : formatCopilotMarkdown(text);
+
+  const meta = document.createElement('div');
+  meta.className = 'copilot-msg-meta';
+  const t = new Date();
+  const hhmm = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+  meta.textContent = role === 'user' ? `You · ${hhmm}` : `ORBITAL AI · ${hhmm}`;
+
+  wrap.appendChild(bubble);
+  wrap.appendChild(meta);
+  msgs.appendChild(wrap);
+  scrollCopilotToBottom();
+  return { wrap, bubble };
+}
+
+function appendTyping() {
+  const msgs = document.getElementById('copilotMessages');
+  const el = document.createElement('div');
+  el.className = 'copilot-typing';
+  el.innerHTML = '<span></span><span></span><span></span>';
+  msgs.appendChild(el);
+  scrollCopilotToBottom();
+  return el;
+}
+
+function scrollCopilotToBottom() {
+  const msgs = document.getElementById('copilotMessages');
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function formatCopilotMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^[\*\-] (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>(\n|$))+/g, s => `<ul>${s}</ul>`)
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/\n/g, '<br>')
+    .replace(/^(?!<[uop])([\s\S]+)$/, '<p>$1</p>');
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCopilot);
+} else {
+  initCopilot();
+}
+
+// ============================================================
+// MOBILE UI — bottom nav, drawers, sheets
+// ============================================================
+function isMobile() { return window.innerWidth <= 768; }
+
+function initMobileUI() {
+  if (!isMobile()) return;
+
+  const overlay    = document.getElementById('mobOverlay');
+  const drawer     = document.getElementById('mobDrawer');
+  const sheet      = document.getElementById('mobSheet');
+  const aiSheet    = document.getElementById('mobAISheet');
+  const drawerBody = document.getElementById('mobSatListBody');
+
+  // ── helpers ──
+  function closeAll() {
+    drawer.classList.remove('open');
+    sheet.classList.remove('open');
+    aiSheet.classList.remove('open');
+    overlay.classList.remove('show');
+    document.querySelectorAll('.mob-nav-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('mobGlobe').classList.add('active');
+  }
+
+  function openDrawer(el) {
+    closeAll();
+    el.classList.add('open');
+    overlay.classList.add('show');
+  }
+
+  overlay.addEventListener('click', closeAll);
+  document.getElementById('mobDrawerClose').addEventListener('click', closeAll);
+  document.getElementById('mobSheetClose').addEventListener('click', closeAll);
+  document.getElementById('mobAIClose').addEventListener('click', closeAll);
+
+  // ── Nav buttons ──
+  document.getElementById('mobGlobe').addEventListener('click', () => {
+    closeAll();
+    document.getElementById('mobGlobe').classList.add('active');
+  });
+
+  document.getElementById('mobSats').addEventListener('click', () => {
+    // Clone sat list items into drawer
+    const srcList = document.getElementById('satList');
+    drawerBody.innerHTML = srcList ? srcList.innerHTML : '<p style="padding:20px;color:var(--text-faint);font-size:11px">No satellites loaded yet.</p>';
+    // Re-attach click listeners on cloned items
+    drawerBody.querySelectorAll('.sat-list-item').forEach((item, i) => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.idx ?? i);
+        selectSatellite(idx);
+        closeAll();
+      });
+    });
+    openDrawer(drawer);
+    document.getElementById('mobSats').classList.add('active');
+  });
+
+  document.getElementById('mobFilter').addEventListener('click', () => {
+    openDrawer(sheet);
+    document.getElementById('mobFilter').classList.add('active');
+  });
+
+  document.getElementById('mobAI').addEventListener('click', () => {
+    openDrawer(aiSheet);
+    document.getElementById('mobAI').classList.add('active');
+    document.getElementById('mobAIInput').focus();
+  });
+
+  // ── Sync mobile filter buttons with desktop state ──
+  document.querySelectorAll('.mob-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mob-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Mirror to desktop filter
+      const desktopBtn = document.querySelector(`.filter-btn[data-filter="${btn.dataset.filter}"]`);
+      if (desktopBtn) desktopBtn.click();
+      else {
+        state.activeFilter = btn.dataset.filter;
+        buildSatelliteSprites();
+      }
+    });
+  });
+
+  // ── Sync mobile control buttons ──
+  const mBtnMap = {
+    mBtnOrbits:  'btnOrbits',
+    mBtnLabels:  'btnLabels',
+    mBtnFollow:  'btnFollow',
+    mBtnRefresh: 'btnRefresh'
+  };
+  Object.entries(mBtnMap).forEach(([mobId, deskId]) => {
+    const mobBtn  = document.getElementById(mobId);
+    const deskBtn = document.getElementById(deskId);
+    if (!mobBtn || !deskBtn) return;
+    mobBtn.addEventListener('click', () => {
+      deskBtn.click();
+      const active = deskBtn.dataset.active === 'true';
+      mobBtn.dataset.active = String(active);
+    });
+  });
+
+  // ── Mobile AI panel ──
+  const mobAIInput = document.getElementById('mobAIInput');
+  const mobAISend  = document.getElementById('mobAISend');
+  const mobAIMsgs  = document.getElementById('mobAIMessages');
+
+  // Auto-resize
+  mobAIInput.addEventListener('input', () => {
+    mobAIInput.style.height = 'auto';
+    mobAIInput.style.height = Math.min(mobAIInput.scrollHeight, 100) + 'px';
+  });
+
+  // Quick chips in mobile AI
+  document.querySelectorAll('#mobAISheet .copilot-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      mobAIInput.value = chip.dataset.q;
+      sendMobAI();
+    });
+  });
+
+  mobAISend.addEventListener('click', sendMobAI);
+  mobAIInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMobAI(); }
+  });
+
+  async function sendMobAI() {
+    const text = mobAIInput.value.trim();
+    if (!text || mobAISend.disabled) return;
+    mobAIInput.value = '';
+    mobAIInput.style.height = 'auto';
+
+    const welcome = mobAIMsgs.querySelector('.copilot-welcome');
+    if (welcome) welcome.style.display = 'none';
+
+    // User bubble
+    appendMobMsg('user', text);
+    copilot.messages.push({ role: 'user', content: text });
+
+    // Typing
+    const typing = document.createElement('div');
+    typing.className = 'copilot-typing';
+    typing.innerHTML = '<span></span><span></span><span></span>';
+    mobAIMsgs.appendChild(typing);
+    mobAIMsgs.scrollTop = mobAIMsgs.scrollHeight;
+
+    mobAISend.disabled = true;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 500,
+          system: 'You are ORBITAL AI, an expert satellite and space assistant. Be concise (under 180 words), use **bold** for key terms.',
+          stream: true,
+          messages: copilot.messages.slice(-10)
+        })
+      });
+
+      typing.remove();
+      const { bubble } = appendMobMsg('ai', '');
+      bubble.innerHTML = '<span class="copilot-cursor"></span>';
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let full = '', buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const j = JSON.parse(line.slice(6));
+            if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') {
+              full += j.delta.text;
+              bubble.innerHTML = formatCopilotMarkdown(full) + '<span class="copilot-cursor"></span>';
+              mobAIMsgs.scrollTop = mobAIMsgs.scrollHeight;
+            }
+          } catch(_) {}
+        }
+      }
+      bubble.innerHTML = formatCopilotMarkdown(full);
+      copilot.messages.push({ role: 'assistant', content: full });
+    } catch(e) {
+      typing.remove();
+      const { bubble } = appendMobMsg('ai', '');
+      bubble.classList.add('copilot-error');
+      bubble.textContent = 'Error: ' + e.message;
+    } finally {
+      mobAISend.disabled = false;
+      mobAIMsgs.scrollTop = mobAIMsgs.scrollHeight;
+    }
+  }
+
+  function appendMobMsg(role, text) {
+    const wrap   = document.createElement('div');
+    wrap.className = `copilot-msg ${role}`;
+    const bubble = document.createElement('div');
+    bubble.className = 'copilot-bubble';
+    bubble.innerHTML = role === 'user' ? escapeHtml(text) : formatCopilotMarkdown(text);
+    wrap.appendChild(bubble);
+    mobAIMsgs.appendChild(wrap);
+    mobAIMsgs.scrollTop = mobAIMsgs.scrollHeight;
+    return { wrap, bubble };
+  }
+}
+
+// Re-init on resize crossing the 768px boundary
+let _wasMobile = isMobile();
+window.addEventListener('resize', () => {
+  const now = isMobile();
+  if (now !== _wasMobile) {
+    _wasMobile = now;
+    if (now) initMobileUI();
+  }
+});
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMobileUI);
+} else {
+  initMobileUI();
+}
