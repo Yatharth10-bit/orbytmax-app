@@ -38,7 +38,7 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
         <span class="header-btn-label">SAVED</span>
       </button>
-      <button class="header-icon-btn isro-btn" id="btnISRO" title="ISRO India Panel">
+      <button type="button" class="header-icon-btn isro-btn" id="btnISRO" title="ISRO India Panel">
         <span style="font-size:15px">🇮🇳</span>
         <span class="header-btn-label">ISRO</span>
       </button>
@@ -352,8 +352,8 @@
           </svg>
         </div>
         <div>
-          <div class="copilot-title">ORBITAL AI</div>
-          <div class="copilot-subtitle" id="copilotStatus">Powered by Claude</div>
+          <div class="copilot-title">Space Copilot</div>
+          <div class="copilot-subtitle" id="copilotStatus">Satellite Intelligence AI</div>
         </div>
       </div>
       <div class="copilot-header-right">
@@ -369,6 +369,8 @@
         </button>
       </div>
     </div>
+
+    <div class="copilot-context-badge" id="copilotContextBadge">No satellite selected</div>
 
     <div class="copilot-messages" id="copilotMessages">
       <div class="copilot-welcome">
@@ -482,26 +484,29 @@
           <div class="fp-sub">Missions · Launches · Stats</div>
         </div>
       </div>
-      <button class="fp-close" id="isroClose">✕</button>
+      <button type="button" class="fp-close" id="isroClose">✕</button>
     </div>
 
     <!-- Tabs -->
     <div class="isro-tabs">
-      <button class="isro-tab active" data-tab="missions">🚀 MISSIONS</button>
-      <button class="isro-tab" data-tab="launches">📅 UPCOMING</button>
-      <button class="isro-tab" data-tab="stats">📊 STATS</button>
+      <button type="button" class="isro-tab active" data-tab="missions">🚀 MISSIONS</button>
+      <button type="button" class="isro-tab" data-tab="launches">📅 UPCOMING</button>
+      <button type="button" class="isro-tab" data-tab="stats">📊 STATS</button>
+      <button type="button" class="isro-tab" data-tab="news">📰 NEWS</button>
     </div>
 
     <div class="fp-body isro-body">
       <div class="isro-tab-content active" id="isroTab_missions"></div>
       <div class="isro-tab-content" id="isroTab_launches"></div>
       <div class="isro-tab-content" id="isroTab_stats"></div>
+      <div class="isro-tab-content" id="isroTab_news"></div>
     </div>
   </div>
 
   <!-- Scripts -->
+  <script src="js/config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.0.0/dist/satellite.min.js"></script>
-  <script src="script.js?v=6"></script>
+  <script src="script.js?v=9"></script>
 </body>
 </html>
