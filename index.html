@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
 </head>
 <body>
-
+ 
   <!-- Header -->
   <header id="header">
     <div class="logo">
@@ -36,10 +36,10 @@
       </div>
     </div>
   </header>
-
+ 
   <!-- Canvas -->
   <canvas id="canvas"></canvas>
-
+ 
   <!-- Search -->
   <div class="search-container" id="searchContainer">
     <div class="search-icon">
@@ -50,7 +50,7 @@
     <input type="text" id="searchInput" placeholder="Search satellite..." autocomplete="off" />
     <div id="searchResults" class="search-results"></div>
   </div>
-
+ 
   <!-- Controls -->
   <div class="controls-panel" id="controlsPanel">
     <button class="ctrl-btn" id="btnOrbits" data-active="true" title="Toggle Orbits">
@@ -79,9 +79,9 @@
       </svg>
       <span>REFRESH</span>
     </button>
-
+ 
     <div class="divider"></div>
-
+ 
     <div class="filter-group">
       <span class="filter-label">FILTER</span>
       <button class="filter-btn active" data-filter="all">ALL</button>
@@ -91,7 +91,7 @@
       <button class="filter-btn" data-filter="weather">WEATHER</button>
     </div>
   </div>
-
+ 
   <!-- Satellite Info Panel -->
   <div class="info-panel" id="infoPanel">
     <div class="panel-header">
@@ -108,9 +108,9 @@
         </svg>
       </button>
     </div>
-
+ 
     <div class="panel-badge-row" id="panelBadges"></div>
-
+ 
     <div class="panel-grid">
       <div class="data-cell">
         <span class="data-label">LATITUDE</span>
@@ -145,19 +145,19 @@
         <span class="data-value" id="dEcc">—</span>
       </div>
     </div>
-
+ 
     <div class="tle-block">
       <div class="tle-label">TLE DATA</div>
       <div class="tle-line" id="tleLine1">—</div>
       <div class="tle-line" id="tleLine2">—</div>
     </div>
-
+ 
     <div class="ground-track-section">
       <div class="section-label">GROUND TRACK</div>
       <canvas id="miniMap" width="280" height="130"></canvas>
     </div>
   </div>
-
+ 
   <!-- Satellite List -->
   <div class="sat-list-panel" id="satListPanel">
     <div class="list-header">
@@ -166,7 +166,7 @@
     </div>
     <div class="list-scroll" id="satList"></div>
   </div>
-
+ 
   <!-- Loading Overlay -->
   <div class="loading-overlay" id="loadingOverlay">
     <canvas class="preloader-canvas" id="preloaderCanvas"></canvas>
@@ -196,13 +196,201 @@
       <div class="loading-pct" id="loadingPct">0%</div>
     </div>
   </div>
-
+ 
   <!-- Toast -->
   <div class="toast" id="toast"></div>
-
+ 
   <!-- Watermark -->
   <div class="watermark">by Yatharth</div>
-
+ 
+  <!-- Mobile Bottom Nav -->
+  <nav class="mobile-nav" id="mobileNav">
+    <button class="mob-nav-btn active" id="mobGlobe">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+      <span>GLOBE</span>
+    </button>
+    <button class="mob-nav-btn" id="mobSats">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+      </svg>
+      <span>SATS</span>
+    </button>
+    <button class="mob-nav-btn" id="mobFilter">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+      </svg>
+      <span>FILTER</span>
+    </button>
+    <button class="mob-nav-btn" id="mobAI">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M12 2a7 7 0 0 1 7 7c0 3-1.8 5.6-4.5 6.7V17a.5.5 0 0 1-.5.5h-4a.5.5 0 0 1-.5-.5v-1.3C6.8 14.6 5 12 5 9a7 7 0 0 1 7-7z"/>
+        <path d="M9 21h6"/>
+      </svg>
+      <span>AI</span>
+    </button>
+  </nav>
+ 
+  <!-- Mobile Sat List Drawer -->
+  <div class="mob-drawer" id="mobDrawer">
+    <div class="mob-drawer-handle"></div>
+    <div class="mob-drawer-header">
+      <span class="mob-drawer-title">SATELLITES</span>
+      <button class="mob-drawer-close" id="mobDrawerClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="mob-drawer-body" id="mobSatListBody"></div>
+  </div>
+ 
+  <!-- Mobile Filter Sheet -->
+  <div class="mob-sheet" id="mobSheet">
+    <div class="mob-drawer-handle"></div>
+    <div class="mob-drawer-header">
+      <span class="mob-drawer-title">CONTROLS & FILTERS</span>
+      <button class="mob-drawer-close" id="mobSheetClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="mob-sheet-section">
+      <div class="mob-sheet-label">CONTROLS</div>
+      <div class="mob-ctrl-row">
+        <button class="mob-ctrl-btn" id="mBtnOrbits" data-active="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(30 12 12)"/></svg>
+          ORBITS
+        </button>
+        <button class="mob-ctrl-btn" id="mBtnLabels" data-active="false">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="18" height="10" rx="1"/><path d="M7 11h10M7 15h6"/></svg>
+          LABELS
+        </button>
+        <button class="mob-ctrl-btn" id="mBtnFollow" data-active="false">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L8 8H3l4 4-1.5 5.5L12 14l6.5 3.5L17 12l4-4h-5z"/></svg>
+          FOLLOW
+        </button>
+        <button class="mob-ctrl-btn" id="mBtnRefresh">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          REFRESH
+        </button>
+      </div>
+    </div>
+    <div class="mob-sheet-section">
+      <div class="mob-sheet-label">FILTER BY TYPE</div>
+      <div class="mob-filter-grid">
+        <button class="mob-filter-btn active" data-filter="all">ALL</button>
+        <button class="mob-filter-btn" data-filter="starlink">STARLINK</button>
+        <button class="mob-filter-btn" data-filter="iss">ISS</button>
+        <button class="mob-filter-btn" data-filter="gps">GPS</button>
+        <button class="mob-filter-btn" data-filter="weather">WEATHER</button>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- Mobile AI Panel (full screen) -->
+  <div class="mob-sheet" id="mobAISheet" style="height:88vh;bottom:60px">
+    <div class="mob-drawer-handle"></div>
+    <div class="mob-drawer-header">
+      <span class="mob-drawer-title">ORBITAL AI</span>
+      <button class="mob-drawer-close" id="mobAIClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div class="copilot-messages" id="mobAIMessages">
+        <div class="copilot-welcome">
+          <div class="copilot-welcome-icon">🛰️</div>
+          <div class="copilot-welcome-title">ORBITAL AI</div>
+          <div class="copilot-welcome-text">Ask me anything about satellites, orbital mechanics or space.</div>
+          <div class="copilot-chips">
+            <button class="copilot-chip" data-q="What is the ISS orbit altitude?">ISS altitude?</button>
+            <button class="copilot-chip" data-q="Explain LEO vs GEO orbits">LEO vs GEO?</button>
+            <button class="copilot-chip" data-q="How does Starlink work?">Starlink?</button>
+            <button class="copilot-chip" data-q="What is orbital decay?">Orbital decay?</button>
+          </div>
+        </div>
+      </div>
+      <div class="copilot-input-area">
+        <div class="copilot-input-wrap">
+          <textarea id="mobAIInput" placeholder="Ask about satellites..." rows="1" spellcheck="false"></textarea>
+          <button class="copilot-send" id="mobAISend">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="M22 2 11 13"/></svg>
+          </button>
+        </div>
+        <div class="copilot-footer-note">AI may make mistakes · Always verify critical data</div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- Overlay -->
+  <div class="mob-overlay" id="mobOverlay"></div>
+ 
+  <!-- AI Copilot Toggle Button -->
+  <button class="copilot-fab" id="copilotFab" title="AI Copilot">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+      <path d="M12 2a7 7 0 0 1 7 7c0 3-1.8 5.6-4.5 6.7V17a.5.5 0 0 1-.5.5h-4a.5.5 0 0 1-.5-.5v-1.3C6.8 14.6 5 12 5 9a7 7 0 0 1 7-7z"/>
+      <path d="M9 21h6M10 17.5v1M14 17.5v1"/>
+    </svg>
+    <span class="copilot-fab-label">ASK AI</span>
+    <span class="copilot-fab-ping"></span>
+  </button>
+ 
+  <!-- AI Copilot Panel -->
+  <div class="copilot-panel" id="copilotPanel">
+    <div class="copilot-header">
+      <div class="copilot-header-left">
+        <div class="copilot-avatar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+          </svg>
+        </div>
+        <div>
+          <div class="copilot-title">ORBITAL AI</div>
+          <div class="copilot-subtitle" id="copilotStatus">Powered by Claude</div>
+        </div>
+      </div>
+      <div class="copilot-header-right">
+        <button class="copilot-clear" id="copilotClear" title="Clear chat">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+          </svg>
+        </button>
+        <button class="copilot-close" id="copilotClose">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+ 
+    <div class="copilot-messages" id="copilotMessages">
+      <div class="copilot-welcome">
+        <div class="copilot-welcome-icon">🛰️</div>
+        <div class="copilot-welcome-title">ORBITAL AI Copilot</div>
+        <div class="copilot-welcome-text">Ask me anything about satellites, orbital mechanics, space debris, or the objects currently being tracked.</div>
+        <div class="copilot-chips">
+          <button class="copilot-chip" data-q="What is the ISS current orbit altitude?">ISS altitude?</button>
+          <button class="copilot-chip" data-q="Explain LEO vs GEO orbits">LEO vs GEO?</button>
+          <button class="copilot-chip" data-q="How does Starlink work?">How Starlink works?</button>
+          <button class="copilot-chip" data-q="What is orbital decay?">Orbital decay?</button>
+          <button class="copilot-chip" data-q="What is a TLE and how is it used?">What is a TLE?</button>
+          <button class="copilot-chip" data-q="How many satellites are in orbit right now?">Satellites in orbit?</button>
+        </div>
+      </div>
+    </div>
+ 
+    <div class="copilot-input-area">
+      <div class="copilot-input-wrap">
+        <textarea id="copilotInput" placeholder="Ask about satellites, orbits, space..." rows="1" spellcheck="false"></textarea>
+        <button class="copilot-send" id="copilotSend">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="M22 2 11 13"/>
+          </svg>
+        </button>
+      </div>
+      <div class="copilot-footer-note">AI may make mistakes · Always verify critical data</div>
+    </div>
+  </div>
+ 
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.0.0/dist/satellite.min.js"></script>
