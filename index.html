@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
 </head>
 <body>
- 
+
   <!-- Header -->
   <header id="header">
     <div class="logo">
@@ -36,10 +36,10 @@
       </div>
     </div>
   </header>
- 
+
   <!-- Canvas -->
   <canvas id="canvas"></canvas>
- 
+
   <!-- Search -->
   <div class="search-container" id="searchContainer">
     <div class="search-icon">
@@ -50,7 +50,7 @@
     <input type="text" id="searchInput" placeholder="Search satellite..." autocomplete="off" />
     <div id="searchResults" class="search-results"></div>
   </div>
- 
+
   <!-- Controls -->
   <div class="controls-panel" id="controlsPanel">
     <button class="ctrl-btn" id="btnOrbits" data-active="true" title="Toggle Orbits">
@@ -79,9 +79,9 @@
       </svg>
       <span>REFRESH</span>
     </button>
- 
+
     <div class="divider"></div>
- 
+
     <div class="filter-group">
       <span class="filter-label">FILTER</span>
       <button class="filter-btn active" data-filter="all">ALL</button>
@@ -91,7 +91,7 @@
       <button class="filter-btn" data-filter="weather">WEATHER</button>
     </div>
   </div>
- 
+
   <!-- Satellite Info Panel -->
   <div class="info-panel" id="infoPanel">
     <div class="panel-header">
@@ -108,9 +108,9 @@
         </svg>
       </button>
     </div>
- 
+
     <div class="panel-badge-row" id="panelBadges"></div>
- 
+
     <div class="panel-grid">
       <div class="data-cell">
         <span class="data-label">LATITUDE</span>
@@ -145,19 +145,19 @@
         <span class="data-value" id="dEcc">—</span>
       </div>
     </div>
- 
+
     <div class="tle-block">
       <div class="tle-label">TLE DATA</div>
       <div class="tle-line" id="tleLine1">—</div>
       <div class="tle-line" id="tleLine2">—</div>
     </div>
- 
+
     <div class="ground-track-section">
       <div class="section-label">GROUND TRACK</div>
       <canvas id="miniMap" width="280" height="130"></canvas>
     </div>
   </div>
- 
+
   <!-- Satellite List -->
   <div class="sat-list-panel" id="satListPanel">
     <div class="list-header">
@@ -166,7 +166,7 @@
     </div>
     <div class="list-scroll" id="satList"></div>
   </div>
- 
+
   <!-- Loading Overlay -->
   <div class="loading-overlay" id="loadingOverlay">
     <canvas class="preloader-canvas" id="preloaderCanvas"></canvas>
@@ -196,13 +196,13 @@
       <div class="loading-pct" id="loadingPct">0%</div>
     </div>
   </div>
- 
+
   <!-- Toast -->
   <div class="toast" id="toast"></div>
- 
+
   <!-- Watermark -->
   <div class="watermark">by Yatharth</div>
- 
+
   <!-- Mobile Bottom Nav -->
   <nav class="mobile-nav" id="mobileNav">
     <button class="mob-nav-btn active" id="mobGlobe">
@@ -231,7 +231,7 @@
       <span>AI</span>
     </button>
   </nav>
- 
+
   <!-- Mobile Sat List Drawer -->
   <div class="mob-drawer" id="mobDrawer">
     <div class="mob-drawer-handle"></div>
@@ -243,7 +243,7 @@
     </div>
     <div class="mob-drawer-body" id="mobSatListBody"></div>
   </div>
- 
+
   <!-- Mobile Filter Sheet -->
   <div class="mob-sheet" id="mobSheet">
     <div class="mob-drawer-handle"></div>
@@ -285,7 +285,7 @@
       </div>
     </div>
   </div>
- 
+
   <!-- Mobile AI Panel (full screen) -->
   <div class="mob-sheet" id="mobAISheet" style="height:88vh;bottom:60px">
     <div class="mob-drawer-handle"></div>
@@ -320,10 +320,10 @@
       </div>
     </div>
   </div>
- 
+
   <!-- Overlay -->
   <div class="mob-overlay" id="mobOverlay"></div>
- 
+
   <!-- AI Copilot Toggle Button -->
   <button class="copilot-fab" id="copilotFab" title="AI Copilot">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
@@ -333,7 +333,7 @@
     <span class="copilot-fab-label">ASK AI</span>
     <span class="copilot-fab-ping"></span>
   </button>
- 
+
   <!-- AI Copilot Panel -->
   <div class="copilot-panel" id="copilotPanel">
     <div class="copilot-header">
@@ -361,7 +361,7 @@
         </button>
       </div>
     </div>
- 
+
     <div class="copilot-messages" id="copilotMessages">
       <div class="copilot-welcome">
         <div class="copilot-welcome-icon">🛰️</div>
@@ -377,7 +377,7 @@
         </div>
       </div>
     </div>
- 
+
     <div class="copilot-input-area">
       <div class="copilot-input-wrap">
         <textarea id="copilotInput" placeholder="Ask about satellites, orbits, space..." rows="1" spellcheck="false"></textarea>
@@ -390,10 +390,10 @@
       <div class="copilot-footer-note">AI may make mistakes · Always verify critical data</div>
     </div>
   </div>
- 
+
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.0.0/dist/satellite.min.js"></script>
-  <script src="script.js?v=2"></script>
+  <script src="script.js?v=5"></script>
 </body>
 </html>
