@@ -2090,7 +2090,7 @@ function loadCopilotScript() {
   if (_copilotScriptLoading) return _copilotScriptLoading;
   _copilotScriptLoading = new Promise((resolve) => {
     const s = document.createElement('script');
-    s.src = './js/copilot.js?v=1';
+    s.src = './js/copilot.js?v=2';
     s.onload  = () => resolve(window.OrbitalCopilot || null);
     s.onerror = () => resolve(null); // missing file → graceful null, never crashes
     document.body.appendChild(s);
@@ -2111,6 +2111,10 @@ function initSpaceCopilot() {
   document.getElementById('copilotFab')?.addEventListener('click', async () => {
     try {
       const mod = await ensureSpaceCopilot();
+      if (!mod || typeof mod.toggleCopilot !== 'function') {
+        showToast('Space Copilot module is unavailable');
+        return;
+      }
       mod.toggleCopilot();
     } catch (e) {
       showToast('Space Copilot failed to load');
@@ -2737,6 +2741,129 @@ async function loadIsroNews() {
   }
 }
 
+const DEFAULT_ISRO_NEWS = {
+  updated: '2026-06-03T00:00:00.000Z',
+  source: 'bundled fallback',
+  articles: [
+    {
+      title: 'ISRO news feed is ready',
+      source: 'ORBITAL',
+      date: 'Auto refresh enabled',
+      url: 'https://www.isro.gov.in/',
+      summary: 'Run the local backend with npm start for periodically refreshed ISRO headlines. The bundled fallback keeps this panel visible when live feeds are unreachable.'
+    },
+    {
+      title: 'Track Indian satellites in the live catalog',
+      source: 'ORBITAL',
+      date: 'Live tracker',
+      url: 'https://celestrak.org/',
+      summary: 'Use the ISRO panel missions and stats tabs to jump to Indian satellites currently available in the loaded TLE data.'
+    }
+  ]
+};
+
+function newsRequestOptions(timeoutMs = 5000) {
+  if (!window.AbortController) return {};
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), timeoutMs);
+  return { signal: ctrl.signal };
+}
+
+function normalizeNewsPayload(data, source) {
+  const articles = Array.isArray(data?.articles) ? data.articles : [];
+  return {
+    updated: data?.updated || new Date().toISOString(),
+    source: data?.source || source,
+    articles: articles
+      .filter(a => a && a.title)
+      .slice(0, 8)
+      .map(a => ({
+        title: String(a.title || '').trim(),
+        source: String(a.source || 'ISRO').trim(),
+        date: String(a.date || '').trim(),
+        url: String(a.url || 'https://www.isro.gov.in/').trim(),
+        summary: String(a.summary || '').trim()
+      }))
+  };
+}
+
+function escapeNewsHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+async function fetchNewsJson(url, timeoutMs) {
+  const res = await fetch(url, newsRequestOptions(timeoutMs));
+  if (!res.ok) throw new Error(`News request failed: ${res.status}`);
+  return res.json();
+}
+
+async function getIsroNewsData() {
+  const sameOrigin = location.protocol === 'http:' || location.protocol === 'https:';
+  if (sameOrigin) {
+    try {
+      const data = await fetchNewsJson('/api/isro-news', 5000);
+      const normalized = normalizeNewsPayload(data, 'backend');
+      if (normalized.articles.length) return normalized;
+    } catch (e) {
+      devLog('backend news unavailable', e.message);
+    }
+  }
+
+  try {
+    const data = await fetchNewsJson('./data/isro-news.json', 2500);
+    const normalized = normalizeNewsPayload(data, 'local data');
+    if (normalized.articles.length) return normalized;
+  } catch (e) {
+    devLog('local news unavailable', e.message);
+  }
+
+  return normalizeNewsPayload(DEFAULT_ISRO_NEWS, 'bundled fallback');
+}
+
+async function loadIsroNews(options = {}) {
+  const el = document.getElementById('isroTab_news');
+  if (!el) return;
+  if (el.dataset.loading === '1') return;
+  el.dataset.loading = '1';
+  if (!options.silent) el.innerHTML = '<div class="isro-news-loading">Loading ISRO news...</div>';
+  try {
+    const data = await getIsroNewsData();
+    const articles = data.articles || [];
+    if (!articles.length) {
+      el.innerHTML = '<div class="isro-news-empty">No news articles available right now.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="isro-news-updated">Updated ${escapeNewsHtml(new Date(data.updated || Date.now()).toLocaleString())} &middot; ${escapeNewsHtml(data.source || 'news feed')}</div>
+      ${articles.map(a => `
+        <a class="isro-news-card" href="${escapeNewsHtml(a.url)}" target="_blank" rel="noopener noreferrer">
+          <div class="isro-news-title">${escapeNewsHtml(a.title)}</div>
+          <div class="isro-news-meta">${escapeNewsHtml(a.source || 'ISRO')} &middot; ${escapeNewsHtml(a.date || '')}</div>
+          <div class="isro-news-summary">${escapeNewsHtml(a.summary || '')}</div>
+        </a>`).join('')}`;
+  } catch (e) {
+    devLog('news render failed', e);
+    el.innerHTML = '<div class="isro-news-empty">Could not load news. Tracker still works normally.</div>';
+  } finally {
+    el.dataset.loading = '0';
+  }
+}
+
+function startIsroNewsAutoRefresh() {
+  if (window._isroNewsAutoRefresh) return;
+  window._isroNewsAutoRefresh = setInterval(() => {
+    const panelOpen = document.getElementById('isroPanel')?.classList.contains('open');
+    const newsActive = document.getElementById('isroTab_news')?.classList.contains('active');
+    if (panelOpen && newsActive) loadIsroNews({ silent: true });
+  }, 10 * 60 * 1000);
+}
+
 function renderIsroMissionCard(m) {
   const statusClass = {
     SUCCESS: 'status-success', ACTIVE: 'status-active', ENDED: 'status-ended',
@@ -2916,6 +3043,7 @@ function initISROPanel() {
     });
   });
 
+  startIsroNewsAutoRefresh();
   devLog('ISRO panel initialized');
 }
 
