@@ -23,6 +23,10 @@ const TLE_MAX_PARSE = IS_MOBILE ? 1200 : 2500;
 const TLE_MAX_RENDER = IS_MOBILE ? 600 : 1500;
 const TLE_RETRY_ATTEMPTS = 3;
 const LOADER_MIN_MS = 2500;
+const MOBILE_GLOBE_CAMERA_Z = 4.25;
+const DESKTOP_GLOBE_CAMERA_Z = 3.2;
+const MOBILE_GLOBE_FOV = 48;
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function devLog(...args) {
   if (window.ORBITAL_CONFIG?.DEV) console.log('[ORBITAL]', ...args);
@@ -155,13 +159,15 @@ function sampleOrbitPositions(satrec, steps) {
 // ============================================================
 function initThree() {
   const canvas = document.getElementById('canvas');
+  const size = getRenderSize();
   state.scene = new THREE.Scene();
-  state.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 200);
+  state.camera = new THREE.PerspectiveCamera(45, size.width / size.height, 0.001, 200);
   state.camera.position.set(0, 0, 3.2);
 
   state.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-  state.renderer.setSize(window.innerWidth, window.innerHeight);
-  state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  state.renderer.setSize(size.width, size.height, false);
+  const maxDpr = IS_MOBILE ? 1.5 : 2;
+  state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDpr));
   state.renderer.outputEncoding = THREE.sRGBEncoding;
 
   state.clock = new THREE.Clock();
@@ -534,7 +540,8 @@ function buildEarth() {
   const tLoader = new THREE.TextureLoader();
 
   // Earth sphere
-  const geo = new THREE.SphereGeometry(EARTH_RADIUS_3D, 128, 128);
+  const earthSeg = IS_MOBILE ? 72 : 128;
+  const geo = new THREE.SphereGeometry(EARTH_RADIUS_3D, earthSeg, earthSeg);
 
   // Load real NASA Blue Marble texture via CDN proxy
   const earthTex = tLoader.load(
@@ -620,7 +627,7 @@ function initOrbitControls() {
     rotateSpeed: 0.0022,      // was 0.005 — slower drag rotation
     dampingFactor: 0.035,     // was 0.08 — more inertia / glide
     velocity: { theta: 0, phi: 0 },
-    autoRotate: true,
+    autoRotate: !REDUCED_MOTION,
     autoRotateSpeed: 0.00005  // was 0.00008 — slower idle spin
   };
 
@@ -667,6 +674,7 @@ function initOrbitControls() {
     }
   }, { passive: true });
   el.addEventListener('touchmove', e => {
+    e.preventDefault();
     if (e.touches.length === 1 && ctrl.isDragging) {
       const dx = e.touches[0].clientX - ctrl.lastMouse.x;
       const dy = e.touches[0].clientY - ctrl.lastMouse.y;
@@ -682,10 +690,79 @@ function initOrbitControls() {
       ctrl.targetRadius = Math.max(1.15, Math.min(20, ctrl.targetRadius * ratio));
       lastTouchDist = d;
     }
-  }, { passive: true });
+  }, { passive: false });
   el.addEventListener('touchend', () => { ctrl.isDragging = false; });
 
   state.orbitControls = ctrl;
+  applyMobileGlobeView();
+}
+
+function isMobile() {
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function getRenderSize() {
+  const canvas = document.getElementById('canvas');
+  const width = Math.max(1, Math.round(canvas?.clientWidth || window.innerWidth));
+  const height = Math.max(1, Math.round(canvas?.clientHeight || window.innerHeight));
+  return { width, height, aspect: width / height };
+}
+
+function getMobileGlobeDistance(aspect) {
+  const narrowBoost = aspect < 0.68 ? (0.68 - aspect) * 2.2 : 0;
+  const shortBoost = window.innerHeight < 760 ? 0.25 : 0;
+  return MOBILE_GLOBE_CAMERA_Z + narrowBoost + shortBoost;
+}
+
+function applyMobileGlobeView() {
+  if (!state.camera || !state.orbitControls) return;
+  const ctrl = state.orbitControls;
+  const mobile = isMobile();
+  const { aspect } = getRenderSize();
+  const dist = mobile ? getMobileGlobeDistance(aspect) : DESKTOP_GLOBE_CAMERA_Z;
+  state.camera.fov = mobile && aspect < 0.62 ? 51 : (mobile ? MOBILE_GLOBE_FOV : 45);
+  state.camera.updateProjectionMatrix();
+  ctrl.targetRadius = dist;
+  ctrl.spherical.radius = dist;
+  ctrl.spherical.phi = Math.min(ctrl.spherical.phi, Math.PI * 0.48);
+  const offset = new THREE.Vector3(0, 0, dist);
+  state.camera.position.copy(ctrl.target).add(offset);
+  ctrl.spherical.setFromVector3(state.camera.position.clone().sub(ctrl.target));
+}
+
+function closeMobileOverlays() {
+  if (!isMobile()) return;
+  ['mobDrawer', 'mobSheet', 'mobAISheet', 'mobMoreSheet'].forEach(id => {
+    document.getElementById(id)?.classList.remove('open');
+  });
+  document.getElementById('mobOverlay')?.classList.remove('show');
+  document.querySelectorAll('.mob-nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('mobGlobe')?.classList.add('active');
+  syncMobilePanelA11y();
+}
+
+function syncMobilePanelA11y() {
+  const overlay = document.getElementById('mobOverlay');
+  const panelIds = ['mobDrawer', 'mobSheet', 'mobAISheet', 'mobMoreSheet'];
+  const openPanel = panelIds.some(id => document.getElementById(id)?.classList.contains('open'));
+  overlay?.setAttribute('aria-hidden', String(!openPanel));
+  document.querySelectorAll('.mob-nav-btn[aria-controls]').forEach(btn => {
+    const target = document.getElementById(btn.getAttribute('aria-controls'));
+    btn.setAttribute('aria-expanded', String(!!target?.classList.contains('open')));
+  });
+  panelIds.forEach(id => {
+    const panel = document.getElementById(id);
+    panel?.setAttribute('aria-hidden', String(!panel.classList.contains('open')));
+  });
+}
+
+function resizeMiniMapForViewport() {
+  const canvas = document.getElementById('miniMap');
+  if (!canvas) return;
+  const section = canvas.closest('.ground-track-section');
+  const w = Math.max(240, (section?.clientWidth || canvas.parentElement?.clientWidth || 280) - 8);
+  canvas.width = Math.floor(w);
+  canvas.height = Math.floor(w * 0.46);
 }
 
 function updateOrbitControls() {
@@ -922,7 +999,7 @@ function trackSatelliteByNorad(norad, missionName) {
   }
   const idx = getFilteredSats().findIndex(s => s.norad === noradStr);
   if (idx >= 0) {
-    document.getElementById('isroPanel')?.classList.remove('open');
+    setFeaturePanelOpen('isroPanel', false);
     selectSatellite(idx);
   }
 }
@@ -952,6 +1029,9 @@ function buildSatList(sats) {
     const div = document.createElement('div');
     div.className = 'sat-list-item';
     div.dataset.idx = i;
+    div.setAttribute('role', 'button');
+    div.setAttribute('tabindex', '0');
+    div.setAttribute('aria-label', `Select satellite ${s.name}, NORAD ${s.norad}`);
     div.innerHTML = `
       <span class="sat-list-emoji">${getCategoryEmoji(s.cat)}</span>
       <div class="sat-list-info">
@@ -959,6 +1039,12 @@ function buildSatList(sats) {
         <div class="sat-list-id">#${s.norad}</div>
       </div>`;
     div.addEventListener('click', () => selectSatellite(i));
+    div.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectSatellite(i);
+      }
+    });
     el.appendChild(div);
   }
 }
@@ -1032,21 +1118,27 @@ function selectSatellite(listIdx) {
   badges.innerHTML = `
     <span class="badge ${getBadgeClass(orbitType)}">${orbitType}</span>
     <span class="badge badge-type">${sat.cat.toUpperCase()}</span>
-    <button class="panel-action-btn bookmark-btn ${isBookmarked ? 'bookmarked' : ''}" id="panelBookmarkBtn" title="${isBookmarked ? 'Remove bookmark' : 'Bookmark'}">
+    <button type="button" class="panel-action-btn bookmark-btn ${isBookmarked ? 'bookmarked' : ''}" id="panelBookmarkBtn" title="${isBookmarked ? 'Remove bookmark' : 'Bookmark'}" aria-label="${isBookmarked ? 'Remove bookmark for' : 'Bookmark'} ${sat.name}">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="${isBookmarked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
       ${isBookmarked ? 'SAVED' : 'SAVE'}
     </button>
-    <button class="panel-action-btn share-btn" id="panelShareBtn" title="Share">
+    <button type="button" class="panel-action-btn share-btn" id="panelShareBtn" title="Share" aria-label="Share ${sat.name}">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
       SHARE
     </button>
-    <button class="panel-action-btn pass-btn" id="panelPassBtn" title="Predict passes over your location">
+    <button type="button" class="panel-action-btn pass-btn" id="panelPassBtn" title="Predict passes over your location" aria-label="Predict passes for ${sat.name}">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       PASSES
     </button>
   `;
 
-  document.getElementById('infoPanel').classList.add('open');
+  const infoPanel = document.getElementById('infoPanel');
+  infoPanel.classList.add('open');
+  infoPanel.setAttribute('aria-hidden', 'false');
+  if (isMobile()) {
+    closeMobileOverlays();
+    resizeMiniMapForViewport();
+  }
   drawMiniMap(sat);
   window.OrbitalCopilot?.updateContextBadge?.();
 
@@ -1067,7 +1159,9 @@ function selectSatellite(listIdx) {
 
   // Highlight list item
   document.querySelectorAll('.sat-list-item').forEach(el => {
-    el.classList.toggle('selected', parseInt(el.dataset.idx) === listIdx);
+    const selected = parseInt(el.dataset.idx) === listIdx;
+    el.classList.toggle('selected', selected);
+    el.setAttribute('aria-pressed', String(selected));
   });
 }
 
@@ -1075,13 +1169,19 @@ function deselectSatellite() {
   state.selectedIndex = -1;
   state.followMode = false;
   document.getElementById('btnFollow').dataset.active = 'false';
-  document.getElementById('infoPanel').classList.remove('open');
+  document.getElementById('btnFollow').setAttribute('aria-pressed', 'false');
+  const infoPanel = document.getElementById('infoPanel');
+  infoPanel.classList.remove('open');
+  infoPanel.setAttribute('aria-hidden', 'true');
   state.sprites.forEach(s => {
     if (!s) return;
     s.material.opacity = 1.0;
     s.material.color.set(0xffffff);
   });
-  document.querySelectorAll('.sat-list-item').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.sat-list-item').forEach(el => {
+    el.classList.remove('selected');
+    el.setAttribute('aria-pressed', 'false');
+  });
 }
 
 // ============================================================
@@ -1816,15 +1916,21 @@ function initSearch() {
 // BUTTON CONTROLS
 // ============================================================
 function initControls() {
+  document.getElementById('btnOrbits').setAttribute('aria-pressed', String(state.showOrbits));
+  document.getElementById('btnLabels').setAttribute('aria-pressed', String(state.showLabels));
+  document.getElementById('btnFollow').setAttribute('aria-pressed', String(state.followMode));
+
   document.getElementById('btnOrbits').addEventListener('click', () => {
     state.showOrbits = !state.showOrbits;
     document.getElementById('btnOrbits').dataset.active = state.showOrbits;
+    document.getElementById('btnOrbits').setAttribute('aria-pressed', String(state.showOrbits));
     state.orbitLines.forEach(l => { if (l) l.visible = state.showOrbits; });
   });
 
   document.getElementById('btnLabels').addEventListener('click', () => {
     state.showLabels = !state.showLabels;
     document.getElementById('btnLabels').dataset.active = state.showLabels;
+    document.getElementById('btnLabels').setAttribute('aria-pressed', String(state.showLabels));
     showToast(state.showLabels ? 'Labels ON (performance impact)' : 'Labels OFF');
   });
 
@@ -1832,6 +1938,7 @@ function initControls() {
     if (state.selectedIndex < 0) { showToast('Select a satellite first'); return; }
     state.followMode = !state.followMode;
     document.getElementById('btnFollow').dataset.active = state.followMode;
+    document.getElementById('btnFollow').setAttribute('aria-pressed', String(state.followMode));
     if (!state.followMode && state.orbitControls) {
       state.orbitControls.spherical.setFromVector3(
         state.camera.position.clone().sub(state.orbitControls.target)
@@ -1851,9 +1958,12 @@ function initControls() {
 
   // Filter buttons
   document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(btn.classList.contains('active')));
     btn.addEventListener('click', () => {
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.filter-btn').forEach(b => b.setAttribute('aria-pressed', 'false'));
       btn.classList.add('active');
+      btn.setAttribute('aria-pressed', 'true');
       state.activeFilter = btn.dataset.filter;
       state.selectedIndex = -1;
       state.spriteMaterialCache = {};
@@ -1867,9 +1977,28 @@ function initControls() {
 // WINDOW RESIZE
 // ============================================================
 function onResize() {
-  state.camera.aspect = window.innerWidth / window.innerHeight;
-  state.camera.updateProjectionMatrix();
-  state.renderer.setSize(window.innerWidth, window.innerHeight);
+  const mobile = isMobile();
+  const maxDpr = mobile ? 1.5 : 2;
+  const { width, height } = getRenderSize();
+  state.camera.aspect = width / height;
+  state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDpr));
+  state.renderer.setSize(width, height, false);
+  applyMobileGlobeView();
+  if (mobile && document.getElementById('infoPanel')?.classList.contains('open')) {
+    resizeMiniMapForViewport();
+    const filtered = getFilteredSats();
+    const sat = filtered[state.selectedIndex];
+    if (sat) drawMiniMap(sat);
+  }
+}
+
+let _resizeRaf = 0;
+function scheduleResize() {
+  if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
+  _resizeRaf = requestAnimationFrame(() => {
+    _resizeRaf = 0;
+    onResize();
+  });
 }
 
 // ============================================================
@@ -1886,7 +2015,8 @@ async function init() {
   initOrbitControls();
 
   // Events
-  window.addEventListener('resize', onResize);
+  window.addEventListener('resize', scheduleResize);
+  window.addEventListener('orientationchange', () => setTimeout(scheduleResize, 220));
   window.addEventListener('click', onCanvasClick);
   initSearch();
   initControls();
@@ -1958,11 +2088,11 @@ let _copilotScriptLoading = null;
 function loadCopilotScript() {
   if (window.OrbitalCopilot) return Promise.resolve(window.OrbitalCopilot);
   if (_copilotScriptLoading) return _copilotScriptLoading;
-  _copilotScriptLoading = new Promise((resolve, reject) => {
+  _copilotScriptLoading = new Promise((resolve) => {
     const s = document.createElement('script');
     s.src = './js/copilot.js?v=1';
-    s.onload = () => resolve(window.OrbitalCopilot);
-    s.onerror = () => reject(new Error('Failed to load Space Copilot'));
+    s.onload  = () => resolve(window.OrbitalCopilot || null);
+    s.onerror = () => resolve(null); // missing file → graceful null, never crashes
     document.body.appendChild(s);
   });
   return _copilotScriptLoading;
@@ -1970,11 +2100,11 @@ function loadCopilotScript() {
 
 async function ensureSpaceCopilot() {
   const mod = await loadCopilotScript();
-  if (!window._copilotReady) {
-    mod.init(getCopilotHooks());
+  if (mod && !window._copilotReady) {
+    try { mod.init(getCopilotHooks()); } catch(e) { devLog('copilot init failed', e); }
     window._copilotReady = true;
   }
-  return mod;
+  return mod; // may be null if js/copilot.js not present
 }
 
 function initSpaceCopilot() {
@@ -1992,77 +2122,131 @@ function initSpaceCopilot() {
 // ============================================================
 // MOBILE UI — bottom nav, drawers, sheets
 // ============================================================
-function isMobile() { return window.innerWidth <= 768; }
+let _mobileUiInited = false;
 
 function initMobileUI() {
-  if (!isMobile()) return;
+  if (!isMobile()) {
+    _mobileUiInited = false;
+    return;
+  }
+  if (_mobileUiInited) return;
+  _mobileUiInited = true;
 
   const overlay    = document.getElementById('mobOverlay');
   const drawer     = document.getElementById('mobDrawer');
   const sheet      = document.getElementById('mobSheet');
   const aiSheet    = document.getElementById('mobAISheet');
+  const moreSheet  = document.getElementById('mobMoreSheet');
   const drawerBody = document.getElementById('mobSatListBody');
+  let lastMobileFocus = null;
 
-  // ── helpers ──
-  function closeAll() {
-    drawer.classList.remove('open');
-    sheet.classList.remove('open');
-    aiSheet.classList.remove('open');
-    overlay.classList.remove('show');
+  function setNavActive(btn) {
     document.querySelectorAll('.mob-nav-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('mobGlobe').classList.add('active');
+    btn?.classList.add('active');
   }
 
-  function openDrawer(el) {
-    closeAll();
+  function closeAll() {
+    closeMobileOverlays();
+    closeFeaturePanels();
+    if (lastMobileFocus && document.contains(lastMobileFocus)) {
+      lastMobileFocus.focus({ preventScroll: true });
+    }
+    lastMobileFocus = null;
+  }
+
+  function openSheet(el, navBtn) {
+    if (!el) return;
+    const focusSource = document.activeElement;
+    closeMobileOverlays();
+    lastMobileFocus = focusSource;
     el.classList.add('open');
     overlay.classList.add('show');
+    setNavActive(navBtn);
+    syncMobilePanelA11y();
+    requestAnimationFrame(() => {
+      const focusTarget = el.querySelector('input, textarea, button, [href], [tabindex]:not([tabindex="-1"])');
+      focusTarget?.focus({ preventScroll: true });
+    });
   }
 
   overlay.addEventListener('click', closeAll);
-  document.getElementById('mobDrawerClose').addEventListener('click', closeAll);
-  document.getElementById('mobSheetClose').addEventListener('click', closeAll);
-  document.getElementById('mobAIClose').addEventListener('click', closeAll);
+  document.getElementById('mobDrawerClose')?.addEventListener('click', closeAll);
+  document.getElementById('mobSheetClose')?.addEventListener('click', closeAll);
+  document.getElementById('mobAIClose')?.addEventListener('click', closeAll);
+  document.getElementById('mobMoreClose')?.addEventListener('click', closeAll);
 
-  // ── Nav buttons ──
-  document.getElementById('mobGlobe').addEventListener('click', () => {
+  document.getElementById('mobGlobe')?.addEventListener('click', () => {
     closeAll();
-    document.getElementById('mobGlobe').classList.add('active');
+    document.getElementById('infoPanel')?.classList.remove('open');
+    ['passPanel', 'bookmarksPanel', 'isroPanel'].forEach(id => {
+      document.getElementById(id)?.classList.remove('open');
+    });
+    setNavActive(document.getElementById('mobGlobe'));
   });
 
-  document.getElementById('mobSats').addEventListener('click', () => {
-    // Clone sat list items into drawer
+  document.getElementById('mobSats')?.addEventListener('click', () => {
     const srcList = document.getElementById('satList');
-    drawerBody.innerHTML = srcList ? srcList.innerHTML : '<p style="padding:20px;color:var(--text-faint);font-size:11px">No satellites loaded yet.</p>';
-    // Re-attach click listeners on cloned items
+    drawerBody.innerHTML = srcList?.innerHTML
+      || '<p class="mob-empty-hint">No satellites loaded yet.</p>';
     drawerBody.querySelectorAll('.sat-list-item').forEach((item, i) => {
       item.addEventListener('click', () => {
-        const idx = parseInt(item.dataset.idx ?? i);
+        const idx = parseInt(item.dataset.idx ?? i, 10);
         selectSatellite(idx);
         closeAll();
       });
     });
-    openDrawer(drawer);
-    document.getElementById('mobSats').classList.add('active');
+    openSheet(drawer, document.getElementById('mobSats'));
   });
 
-  document.getElementById('mobFilter').addEventListener('click', () => {
-    openDrawer(sheet);
-    document.getElementById('mobFilter').classList.add('active');
+  document.getElementById('mobFilter')?.addEventListener('click', () => {
+    openSheet(sheet, document.getElementById('mobFilter'));
   });
 
-  document.getElementById('mobAI').addEventListener('click', () => {
-    openDrawer(aiSheet);
-    document.getElementById('mobAI').classList.add('active');
+  document.getElementById('mobAI')?.addEventListener('click', () => {
+    openSheet(aiSheet, document.getElementById('mobAI'));
     ensureSpaceCopilot().then(() => document.getElementById('mobAIInput')?.focus()).catch(() => {});
   });
 
-  // ── Sync mobile filter buttons with desktop state ──
+  document.getElementById('mobMore')?.addEventListener('click', () => {
+    openSheet(moreSheet, document.getElementById('mobMore'));
+  });
+
+  document.getElementById('mobOpenISRO')?.addEventListener('click', () => {
+    closeAll();
+    openISROPanel();
+  });
+
+  document.getElementById('mobOpenBookmarks')?.addEventListener('click', () => {
+    closeAll();
+    document.getElementById('btnBookmarks')?.click();
+  });
+
+  document.getElementById('mobOpenPasses')?.addEventListener('click', () => {
+    const filtered = getFilteredSats();
+    const sat = state.selectedIndex >= 0 ? filtered[state.selectedIndex] : null;
+    if (!sat) {
+      showToast('Tap a satellite on the globe or pick one from SATS');
+      document.getElementById('mobSats')?.click();
+      return;
+    }
+    closeAll();
+    openPassPredictor(sat);
+  });
+
+  document.getElementById('mobOpenSearch')?.addEventListener('click', () => {
+    closeAll();
+    const input = document.getElementById('searchInput');
+    input?.focus();
+    input?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+
   document.querySelectorAll('.mob-filter-btn').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(btn.classList.contains('active')));
     btn.addEventListener('click', () => {
       document.querySelectorAll('.mob-filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.mob-filter-btn').forEach(b => b.setAttribute('aria-pressed', 'false'));
       btn.classList.add('active');
-      // Mirror to desktop filter
+      btn.setAttribute('aria-pressed', 'true');
       const desktopBtn = document.querySelector(`.filter-btn[data-filter="${btn.dataset.filter}"]`);
       if (desktopBtn) desktopBtn.click();
       else {
@@ -2072,40 +2256,44 @@ function initMobileUI() {
     });
   });
 
-  // ── Sync mobile control buttons ──
   const mBtnMap = {
-    mBtnOrbits:  'btnOrbits',
-    mBtnLabels:  'btnLabels',
-    mBtnFollow:  'btnFollow',
+    mBtnOrbits: 'btnOrbits',
+    mBtnLabels: 'btnLabels',
+    mBtnFollow: 'btnFollow',
     mBtnRefresh: 'btnRefresh'
   };
   Object.entries(mBtnMap).forEach(([mobId, deskId]) => {
-    const mobBtn  = document.getElementById(mobId);
+    const mobBtn = document.getElementById(mobId);
     const deskBtn = document.getElementById(deskId);
     if (!mobBtn || !deskBtn) return;
+    mobBtn.setAttribute('aria-pressed', String(deskBtn.dataset.active === 'true'));
     mobBtn.addEventListener('click', () => {
       deskBtn.click();
-      const active = deskBtn.dataset.active === 'true';
-      mobBtn.dataset.active = String(active);
+      mobBtn.dataset.active = String(deskBtn.dataset.active === 'true');
+      mobBtn.setAttribute('aria-pressed', mobBtn.dataset.active);
     });
   });
 
-  // Mobile AI uses lazy Space Copilot module (js/copilot.js)
   const mobAIInput = document.getElementById('mobAIInput');
   mobAIInput?.addEventListener('input', () => {
     mobAIInput.style.height = 'auto';
-    mobAIInput.style.height = Math.min(mobAIInput.scrollHeight, 100) + 'px';
+    mobAIInput.style.height = Math.min(mobAIInput.scrollHeight, 120) + 'px';
   });
+
+  document.body.classList.add('is-mobile');
+  syncMobilePanelA11y();
 }
 
-// Re-init on resize crossing the 768px boundary
 let _wasMobile = isMobile();
 window.addEventListener('resize', () => {
   const now = isMobile();
   if (now !== _wasMobile) {
     _wasMobile = now;
+    document.body.classList.toggle('is-mobile', now);
     if (now) initMobileUI();
+    else document.body.classList.remove('is-mobile');
   }
+  scheduleResize();
 });
 
 if (document.readyState === 'loading') {
@@ -2113,6 +2301,10 @@ if (document.readyState === 'loading') {
 } else {
   initMobileUI();
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeAllTransientPanels();
+});
 
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  FEATURE 1 — ISS PASS PREDICTOR                                 ║
@@ -2137,7 +2329,7 @@ function initPassPredictor() {
 
   if (!panel) return;
 
-  closeBtn?.addEventListener('click', () => panel.classList.remove('open'));
+  closeBtn?.addEventListener('click', () => setFeaturePanelOpen('passPanel', false));
 
   locBtn?.addEventListener('click', () => {
     if (!navigator.geolocation) {
@@ -2202,12 +2394,14 @@ function initPassPredictor() {
 function openPassPredictor(sat) {
   const panel = document.getElementById('passPanel');
   if (!panel) return;
+  closeMobileOverlays();
   closeFeaturePanels('passPanel');
   passState.currentSat = sat;
   document.getElementById('passSatName').textContent = sat.name;
   document.getElementById('passSatCat').textContent = sat.cat.toUpperCase();
   document.getElementById('passResults').innerHTML = `<div class="pass-hint">Set your location above, then passes compute automatically.</div>`;
-  panel.classList.add('open');
+  setFeaturePanelOpen('passPanel', true);
+  if (isMobile()) requestAnimationFrame(() => document.getElementById('passClose')?.focus({ preventScroll: true }));
   if (passState.observerLat !== null) computePasses(sat);
 }
 
@@ -2382,11 +2576,15 @@ function initBookmarks() {
   if (!panel || !openBtn) return;
 
   openBtn.addEventListener('click', () => {
+    closeMobileOverlays();
     closeFeaturePanels('bookmarksPanel');
-    panel.classList.toggle('open');
+    setFeaturePanelOpen('bookmarksPanel', !panel.classList.contains('open'));
     renderBookmarksList();
+    if (isMobile() && panel.classList.contains('open')) {
+      requestAnimationFrame(() => document.getElementById('bookmarksClose')?.focus({ preventScroll: true }));
+    }
   });
-  closeBtn?.addEventListener('click', () => panel.classList.remove('open'));
+  closeBtn?.addEventListener('click', () => setFeaturePanelOpen('bookmarksPanel', false));
   renderBookmarksList();
 }
 
@@ -2513,8 +2711,12 @@ async function loadIsroNews() {
   el.dataset.loading = '1';
   el.innerHTML = '<div class="isro-news-loading">Loading ISRO news…</div>';
   try {
-    const res = await fetch('./data/isro-news.json', { signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined });
-    const data = res.ok ? await res.json() : { articles: [] };
+    // local isro-news.json is optional — skip gracefully if absent
+    let data = { articles: [] };
+    try {
+      const res = await fetch('./data/isro-news.json', { signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined });
+      if (res.ok) data = await res.json();
+    } catch(_) {}
     const articles = data.articles || [];
     if (!articles.length) {
       el.innerHTML = '<div class="isro-news-empty">No news articles available right now.</div>';
@@ -2587,18 +2789,58 @@ function renderIsroStatsTab() {
   });
 }
 
+function setFeaturePanelOpen(id, open) {
+  const panel = document.getElementById(id);
+  if (!panel) return;
+  panel.classList.toggle('open', open);
+  panel.setAttribute('aria-hidden', String(!open));
+  const triggerMap = {
+    bookmarksPanel: 'btnBookmarks',
+    isroPanel: 'btnISRO'
+  };
+  const trigger = document.getElementById(triggerMap[id]);
+  trigger?.setAttribute('aria-expanded', String(open));
+  if (isMobile()) {
+    const anyOpen = ['passPanel', 'bookmarksPanel', 'isroPanel'].some(panelId =>
+      document.getElementById(panelId)?.classList.contains('open')
+    );
+    document.getElementById('mobOverlay')?.classList.toggle('show', anyOpen);
+    document.getElementById('mobOverlay')?.setAttribute('aria-hidden', String(!anyOpen));
+    if (open) {
+      document.querySelectorAll('.mob-nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('mobMore')?.classList.add('active');
+    } else if (!anyOpen) {
+      document.querySelectorAll('.mob-nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('mobGlobe')?.classList.add('active');
+    }
+  }
+}
+
+function closeAllTransientPanels() {
+  closeMobileOverlays();
+  closeFeaturePanels();
+  if (isMobile()) {
+    const infoPanel = document.getElementById('infoPanel');
+    if (infoPanel?.classList.contains('open')) deselectSatellite();
+  }
+}
+
 function closeFeaturePanels(exceptId) {
   ['passPanel', 'bookmarksPanel', 'isroPanel'].forEach(id => {
-    if (id !== exceptId) document.getElementById(id)?.classList.remove('open');
+    if (id !== exceptId) setFeaturePanelOpen(id, false);
   });
 }
 
 function openISROPanel() {
   const panel = document.getElementById('isroPanel');
   if (!panel) return;
+  closeMobileOverlays();
   closeFeaturePanels('isroPanel');
-  panel.classList.add('open');
+  setFeaturePanelOpen('isroPanel', true);
   renderISROContent();
+  if (isMobile()) {
+    requestAnimationFrame(() => document.getElementById('isroClose')?.focus({ preventScroll: true }));
+  }
 }
 
 function renderIsroMissionsTab() {
@@ -2656,7 +2898,7 @@ function initISROPanel() {
     e.preventDefault();
     e.stopPropagation();
     if (panel.classList.contains('open')) {
-      panel.classList.remove('open');
+      setFeaturePanelOpen('isroPanel', false);
     } else {
       openISROPanel();
     }
@@ -2664,7 +2906,7 @@ function initISROPanel() {
 
   closeBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
-    panel.classList.remove('open');
+    setFeaturePanelOpen('isroPanel', false);
   });
 
   document.querySelectorAll('.isro-tab').forEach(tab => {
