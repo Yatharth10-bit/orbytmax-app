@@ -1,0 +1,12 @@
+{
+  "name": "orbital-satellite-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static satellite tracker with optional local backend for news and copilot endpoints.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "updated": "2026-06-03T00:00:00.000Z",
+  "source": "local fallback",
+  "articles": [
+    {
+      "title": "Live ISRO news backend is configured",
+      "source": "ORBITAL",
+      "date": "Auto refresh ready",
+      "url": "https://www.isro.gov.in/",
+      "summary": "Start the local backend with npm start to pull periodically refreshed ISRO headlines. This local file keeps the news tab populated if the backend or network is unavailable."
+    },
+    {
+      "title": "ISRO panel can track Indian satellites from loaded TLE data",
+      "source": "ORBITAL",
+      "date": "Tracker feature",
+      "url": "https://celestrak.org/",
+      "summary": "The missions and stats tabs connect ISRO mission cards to satellites currently available in the live or cached satellite catalog."
+    },
+    {
+      "title": "Use the refresh control for live satellite catalog updates",
+      "source": "ORBITAL",
+      "date": "Tracker feature",
+      "url": "https://celestrak.org/NORAD/elements/",
+      "summary": "The app first shows cached or bundled satellite data, then refreshes from live CelesTrak sources in the background when available."
+    }
+  ]
+}
