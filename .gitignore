@@ -1,0 +1,32 @@
+.npm-cache/
+.tmp/
+
+# Dependencies and build output
+node_modules/
+.next/
+out/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Local database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+prisma/*.db
+prisma/*.sqlite
+prisma/*.sqlite3
+
+# Logs and generated caches
+*.log
+tsconfig.tsbuildinfo
+.expo
+.expo/
+mobile/.expo
+mobile/.expo/
+mobile/dist-test/
