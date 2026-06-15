@@ -1,22 +1,29 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  buildSatelliteRuntime,
+  categoryColorInt,
+  categoryEmoji,
+  drawMiniMap,
+  EARTH_RADIUS_3D,
+  geoTo3D,
+  orbitTypeLabel,
+  propagateToGeodetic,
+  spriteCategory,
+  type SatelliteRuntime,
+  type TrackerSatellite,
+} from "@/lib/tracker-globe";
 
-type SatPoint = {
-  name: string;
-  lat: number;
-  lon: number;
-  alt: number;
-  category: string;
-};
+type VisibleSatellite = SatelliteRuntime & { index: number };
 
 type PositionPayload = {
-  positions?: SatPoint[];
+  positions?: TrackerSatellite[];
   source?: string;
   updated?: string;
 };
 
-const SESSION_KEY = "orbytmax_tracker_positions_v1";
+const SESSION_KEY = "orbytmax_tracker_positions_v2";
 const SESSION_TTL_MS = 2 * 60 * 1000;
 
 const FILTERS = [
@@ -29,27 +36,31 @@ const FILTERS = [
   { id: "nasa", label: "NASA" },
 ];
 
-const CATEGORY_COLORS: Record<string, number> = {
-  iss: 0xffffff,
-  starlink: 0x7dd3fc,
-  navigation: 0xa7f3d0,
-  weather: 0xfde68a,
-  isro: 0xfb923c,
-  nasa: 0xc4b5fd,
-  scientific: 0x67e8f9,
-};
-
 const EARTH_TEXTURES = {
   map: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg",
   specular: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_specular_2048.jpg",
   clouds: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_clouds_1024.png",
 };
 
-function readSessionCache(): SatPoint[] | null {
+type OrbitControls = {
+  target: import("three").Vector3;
+  spherical: import("three").Spherical;
+  isDragging: boolean;
+  lastMouse: { x: number; y: number };
+  zoomSpeed: number;
+  rotateSpeed: number;
+  dampingFactor: number;
+  velocity: { theta: number; phi: number };
+  autoRotate: boolean;
+  autoRotateSpeed: number;
+  targetRadius: number;
+};
+
+function readSessionCache(): TrackerSatellite[] | null {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    const { at, positions } = JSON.parse(raw) as { at: number; positions: SatPoint[] };
+    const { at, positions } = JSON.parse(raw) as { at: number; positions: TrackerSatellite[] };
     if (Date.now() - at > SESSION_TTL_MS) return null;
     return positions;
   } catch {
@@ -57,11 +68,11 @@ function readSessionCache(): SatPoint[] | null {
   }
 }
 
-function writeSessionCache(positions: SatPoint[]) {
+function writeSessionCache(positions: TrackerSatellite[]) {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify({ at: Date.now(), positions }));
   } catch {
-    /* Storage can be disabled or full; the tracker still works without it. */
+    /* Storage can be disabled or full. */
   }
 }
 
@@ -80,7 +91,6 @@ async function fetchPositions(limit: number, refresh = false, signal?: AbortSign
   const res = await fetch(`/api/tracker/positions?limit=${limit}${suffix}`, { signal });
   const data = (await res.json()) as PositionPayload & { error?: string };
   if (!res.ok) throw new Error(data.error || "Failed to load positions");
-
   return {
     positions: data.positions || [],
     source: data.source || "orbital data",
@@ -88,20 +98,8 @@ async function fetchPositions(limit: number, refresh = false, signal?: AbortSign
   };
 }
 
-function displayRadius(altKm: number) {
-  const compressed = Math.log10(Math.max(1, altKm) + 1) / 8;
-  return 1.08 + Math.min(0.52, compressed);
-}
-
-function toVector(lat: number, lon: number, altKm: number) {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lon + 180) * (Math.PI / 180);
-  const radius = displayRadius(altKm);
-  return [
-    -radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta),
-  ] as const;
+function toRuntimeList(entries: TrackerSatellite[]) {
+  return entries.map(buildSatelliteRuntime).filter((entry): entry is SatelliteRuntime => Boolean(entry));
 }
 
 const SatelliteListItem = memo(function SatelliteListItem({
@@ -111,20 +109,23 @@ const SatelliteListItem = memo(function SatelliteListItem({
   onSelect,
   onFollowToggle,
 }: {
-  sat: SatPoint;
+  sat: VisibleSatellite;
   isSelected: boolean;
   isFollowed: boolean;
-  onSelect: (sat: SatPoint) => void;
-  onFollowToggle: (sat: SatPoint) => void;
+  onSelect: (index: number) => void;
+  onFollowToggle: (index: number) => void;
 }) {
   return (
     <div className={`tracker-list-item ${isSelected ? "is-selected" : ""} ${isFollowed ? "is-followed" : ""}`}>
-      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onSelect(sat)}>
+      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onSelect(sat.index)}>
+        <span className="tracker-list-emoji">{categoryEmoji(sat.category)}</span>
         <span className="block font-bold">{sat.name}</span>
-        <small>{sat.category}</small>
+        <small>
+          {sat.category} · #{sat.norad}
+        </small>
       </button>
       <div className="tracker-list-actions">
-        <button type="button" className="tracker-follow-btn" onClick={() => onFollowToggle(sat)}>
+        <button type="button" className="tracker-follow-btn" onClick={() => onFollowToggle(sat.index)}>
           {isFollowed ? "Unfollow" : "Follow"}
         </button>
       </div>
@@ -132,68 +133,61 @@ const SatelliteListItem = memo(function SatelliteListItem({
   );
 });
 
-function clearGroup(group: import("three").Group) {
-  while (group.children.length) {
-    const child = group.children[0] as import("three").Object3D & {
-      geometry?: import("three").BufferGeometry;
-      material?: import("three").Material | import("three").Material[];
-    };
-    group.remove(child);
-    child.geometry?.dispose();
-    if (Array.isArray(child.material)) {
-      child.material.forEach((m) => m.dispose());
-    } else {
-      child.material?.dispose();
-    }
-  }
-}
-
 export function GlobeTracker() {
   const mountRef = useRef<HTMLDivElement>(null);
+  const miniMapRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState("Starting globe...");
   const [earthStatus, setEarthStatus] = useState("Loading Earth...");
   const [source, setSource] = useState("embedded fallback");
   const [updated, setUpdated] = useState<string>();
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
-  const [isPaused, setIsPaused] = useState(false);
-  const [selected, setSelected] = useState<SatPoint | null>(null);
-  const [followed, setFollowed] = useState<SatPoint | null>(null);
-  const [positions, setPositions] = useState<SatPoint[]>(() => readSessionCache() || []);
+  const [followMode, setFollowMode] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [liveGeo, setLiveGeo] = useState<{ lat: number; lon: number; alt: number; vel: number } | null>(null);
+  const [satellites, setSatellites] = useState<SatelliteRuntime[]>(() => toRuntimeList(readSessionCache() || []));
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
-  const rotationRef = useRef({ x: 0.22, y: -0.42, zoom: 3.15 });
-  const dragRef = useRef<{ x: number; y: number } | null>(null);
-  const rebuildRef = useRef<(() => void) | null>(null);
-  const visibleRef = useRef<SatPoint[]>([]);
-  const selectedRef = useRef<SatPoint | null>(null);
-  const followedRef = useRef<SatPoint | null>(null);
-  const pausedRef = useRef(false);
-  const positionsRef = useRef<SatPoint[]>(positions);
+
+  const satellitesRef = useRef(satellites);
+  const selectedIndexRef = useRef(selectedIndex);
+  const followModeRef = useRef(followMode);
+  const filterRef = useRef(filter);
+  const queryRef = useRef(query);
+  const cameraRef = useRef<import("three").PerspectiveCamera | null>(null);
+  const orbitControlsRef = useRef<OrbitControls | null>(null);
+  const spritesRef = useRef<import("three").Sprite[]>([]);
+  const rebuildSpritesRef = useRef<(() => void) | null>(null);
+  const selectSatelliteRef = useRef<(index: number) => void>(() => {});
+  const liveGeoRef = useRef(liveGeo);
+  const frameCounterRef = useRef(0);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return positions
+    return satellites
+      .map((sat, index) => ({ ...sat, index }))
       .filter((sat) => filter === "all" || sat.category === filter)
       .filter((sat) => !needle || sat.name.toLowerCase().includes(needle))
       .slice(0, 400);
-  }, [filter, positions, query]);
+  }, [filter, query, satellites]);
 
   const categoryCounts = useMemo(() => {
-    return positions.reduce<Record<string, number>>((acc, sat) => {
+    return satellites.reduce<Record<string, number>>((acc, sat) => {
       acc[sat.category] = (acc[sat.category] || 0) + 1;
       return acc;
     }, {});
-  }, [positions]);
+  }, [satellites]);
+
+  const selectedSatellite = selectedIndex >= 0 ? visible.find((sat) => sat.index === selectedIndex) || satellites[selectedIndex] : null;
 
   useEffect(() => {
-    visibleRef.current = visible;
-    selectedRef.current = selected;
-    followedRef.current = followed;
-    pausedRef.current = isPaused;
-    positionsRef.current = positions;
-    rebuildRef.current?.();
-  }, [followed, isPaused, positions, selected, visible]);
+    satellitesRef.current = satellites;
+    selectedIndexRef.current = selectedIndex;
+    followModeRef.current = followMode;
+    filterRef.current = filter;
+    queryRef.current = query;
+    rebuildSpritesRef.current?.();
+  }, [filter, followMode, query, satellites, selectedIndex]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -202,16 +196,20 @@ export function GlobeTracker() {
     let disposed = false;
     let animId = 0;
     let renderer: import("three").WebGLRenderer | null = null;
+    let earth: import("three").Mesh | null = null;
+    let clouds: import("three").Mesh | null = null;
     const ctrl = new AbortController();
 
     const boot = async () => {
       const THREE = await import("three");
+      const { makeSatelliteCanvas } = await import("@/lib/tracker-globe");
       if (disposed) return;
 
       const isMobile = window.matchMedia("(max-width: 768px)").matches;
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(43, mount.clientWidth / mount.clientHeight, 0.1, 100);
-      camera.position.z = rotationRef.current.zoom;
+      const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / mount.clientHeight, 0.001, 200);
+      camera.position.set(0, 0, isMobile ? 4.25 : 3.2);
+      cameraRef.current = camera;
 
       renderer = new THREE.WebGLRenderer({ antialias: !isMobile, alpha: true, powerPreference: "high-performance" });
       renderer.setClearColor(0x000000, 0);
@@ -219,10 +217,8 @@ export function GlobeTracker() {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.4 : 1.8));
       mount.appendChild(renderer.domElement);
 
-      const globe = new THREE.Group();
-      globe.rotation.x = rotationRef.current.x;
-      globe.rotation.y = rotationRef.current.y;
-      scene.add(globe);
+      const textureLoader = new THREE.TextureLoader();
+      textureLoader.setCrossOrigin("anonymous");
 
       const earthMaterial = new THREE.MeshStandardMaterial({
         color: 0x102235,
@@ -230,11 +226,9 @@ export function GlobeTracker() {
         roughness: 0.72,
         metalness: 0.08,
       });
-      const earth = new THREE.Mesh(new THREE.SphereGeometry(1, isMobile ? 48 : 96, isMobile ? 48 : 96), earthMaterial);
-      globe.add(earth);
+      earth = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS_3D, isMobile ? 48 : 96, isMobile ? 48 : 96), earthMaterial);
+      scene.add(earth);
 
-      const textureLoader = new THREE.TextureLoader();
-      textureLoader.setCrossOrigin("anonymous");
       textureLoader.load(
         EARTH_TEXTURES.map,
         (texture) => {
@@ -262,45 +256,24 @@ export function GlobeTracker() {
         earthMaterial.needsUpdate = true;
       });
 
-      const clouds = new THREE.Mesh(
-        new THREE.SphereGeometry(1.012, isMobile ? 36 : 64, isMobile ? 36 : 64),
-        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.22, depthWrite: false })
-      );
+      const cloudMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.22, depthWrite: false });
+      clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, isMobile ? 36 : 64, isMobile ? 36 : 64), cloudMaterial);
       textureLoader.load(EARTH_TEXTURES.clouds, (texture) => {
         if (disposed) {
           texture.dispose();
           return;
         }
         texture.colorSpace = THREE.SRGBColorSpace;
-        clouds.material.map = texture;
-        clouds.material.needsUpdate = true;
-        globe.add(clouds);
+        cloudMaterial.map = texture;
+        cloudMaterial.needsUpdate = true;
+        scene.add(clouds!);
       });
-
-      const grid = new THREE.Mesh(
-        new THREE.SphereGeometry(1.004, 32, 16),
-        new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true, transparent: true, opacity: 0.12 })
-      );
-      globe.add(grid);
 
       const atmosphere = new THREE.Mesh(
         new THREE.SphereGeometry(1.045, 48, 48),
         new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.08 })
       );
-      globe.add(atmosphere);
-
-      const orbitMaterial = new THREE.LineBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.22 });
-      [1.16, 1.36, 1.58].forEach((radius) => {
-        const curve = new THREE.EllipseCurve(0, 0, radius, radius);
-        const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(160));
-        const ring = new THREE.LineLoop(geometry, orbitMaterial.clone());
-        ring.rotation.x = Math.PI / 2;
-        globe.add(ring);
-      });
-
-      const pointsGroup = new THREE.Group();
-      const selectedGroup = new THREE.Group();
-      globe.add(pointsGroup, selectedGroup);
+      scene.add(atmosphere);
 
       const starPositions: number[] = [];
       for (let i = 0; i < 420; i++) {
@@ -326,48 +299,182 @@ export function GlobeTracker() {
       const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
       keyLight.position.set(4, 2, 5);
       scene.add(keyLight);
-      const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.1);
-      rimLight.position.set(-3, -1, -3);
-      scene.add(rimLight);
 
-      rebuildRef.current = () => {
-        clearGroup(pointsGroup);
-        clearGroup(selectedGroup);
+      const spriteTextureCache: Record<string, import("three").CanvasTexture> = {};
+      const spriteMaterialCache: Record<string, import("three").SpriteMaterial> = {};
 
-        const currentVisible = visibleRef.current;
-        if (!currentVisible.length) return;
+      const getSpriteMaterial = (category: string) => {
+        const cat = spriteCategory(category);
+        if (!spriteMaterialCache[cat]) {
+          if (!spriteTextureCache[cat]) {
+            const canvas = makeSatelliteCanvas(category);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.anisotropy = renderer?.capabilities.getMaxAnisotropy() || 1;
+            spriteTextureCache[cat] = texture;
+          }
+          spriteMaterialCache[cat] = new THREE.SpriteMaterial({
+            map: spriteTextureCache[cat],
+            depthTest: false,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+          });
+        }
+        return spriteMaterialCache[cat];
+      };
 
-        const pointPositions: number[] = [];
-        const pointColors: number[] = [];
-        currentVisible.forEach((sat) => {
-          pointPositions.push(...toVector(sat.lat, sat.lon, sat.alt));
-          const color = new THREE.Color(CATEGORY_COLORS[sat.category] || CATEGORY_COLORS.scientific);
-          pointColors.push(color.r, color.g, color.b);
+      const getFiltered = () => {
+        const needle = queryRef.current.trim().toLowerCase();
+        return satellitesRef.current
+          .map((sat, index) => ({ ...sat, index }))
+          .filter((sat) => filterRef.current === "all" || sat.category === filterRef.current)
+          .filter((sat) => !needle || sat.name.toLowerCase().includes(needle))
+          .slice(0, 400);
+      };
+
+      const clearSprites = () => {
+        spritesRef.current.forEach((sprite) => {
+          scene.remove(sprite);
+          sprite.material.dispose();
         });
+        spritesRef.current = [];
+      };
 
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute("position", new THREE.Float32BufferAttribute(pointPositions, 3));
-        geometry.setAttribute("color", new THREE.Float32BufferAttribute(pointColors, 3));
-        pointsGroup.add(
-          new THREE.Points(
-            geometry,
-            new THREE.PointsMaterial({ size: isMobile ? 0.028 : 0.022, vertexColors: true, transparent: true, opacity: 0.95 })
-          )
-        );
+      rebuildSpritesRef.current = () => {
+        clearSprites();
+        const filtered = getFiltered();
+        filtered.forEach((sat, listIdx) => {
+          const material = getSpriteMaterial(sat.category).clone();
+          const sprite = new THREE.Sprite(material);
+          sprite.scale.set(0.042, 0.042, 1);
+          sprite.userData = { satIdx: sat.index, listIdx };
+          scene.add(sprite);
+          spritesRef.current.push(sprite);
+        });
+      };
+      rebuildSpritesRef.current();
 
-        const selectedSat = followedRef.current || selectedRef.current;
-        const focused = selectedSat && currentVisible.find((sat) => sat.name === selectedSat.name);
-        if (focused) {
-          const [x, y, z] = toVector(focused.lat, focused.lon, focused.alt);
-          const marker = new THREE.Mesh(
-            new THREE.SphereGeometry(followedRef.current ? 0.05 : 0.035, 18, 18),
-            new THREE.MeshBasicMaterial({ color: followedRef.current ? 0xff5fa2 : 0xffffff })
-          );
-          marker.position.set(x, y, z);
-          selectedGroup.add(marker);
+      const orbitControls: OrbitControls = {
+        target: new THREE.Vector3(0, 0, 0),
+        spherical: new THREE.Spherical(),
+        isDragging: false,
+        lastMouse: { x: 0, y: 0 },
+        zoomSpeed: 0.06,
+        rotateSpeed: 0.0022,
+        dampingFactor: 0.035,
+        velocity: { theta: 0, phi: 0 },
+        autoRotate: true,
+        autoRotateSpeed: 0.00005,
+        targetRadius: isMobile ? 4.25 : 3.2,
+      };
+      orbitControls.spherical.setFromVector3(camera.position.clone().sub(orbitControls.target));
+      orbitControlsRef.current = orbitControls;
+
+      const updateOrbitControls = () => {
+        const controls = orbitControlsRef.current;
+        if (!controls || followModeRef.current) return;
+        if (controls.autoRotate) controls.velocity.theta += controls.autoRotateSpeed;
+        controls.spherical.theta += controls.velocity.theta;
+        controls.spherical.phi += controls.velocity.phi;
+        controls.spherical.phi = Math.max(0.05, Math.min(Math.PI - 0.05, controls.spherical.phi));
+        controls.spherical.radius += (controls.targetRadius - controls.spherical.radius) * 0.08;
+        controls.velocity.theta *= 1 - controls.dampingFactor;
+        controls.velocity.phi *= 1 - controls.dampingFactor;
+        const pos = new THREE.Vector3().setFromSpherical(controls.spherical).add(controls.target);
+        camera.position.copy(pos);
+        camera.lookAt(controls.target);
+      };
+
+      const updateFollowMode = () => {
+        if (!followModeRef.current || selectedIndexRef.current < 0) return;
+        const sat = satellitesRef.current[selectedIndexRef.current];
+        if (!sat?.lastGeo) return;
+        const coords = geoTo3D(sat.lastGeo.lat, sat.lastGeo.lon, sat.lastGeo.alt);
+        const targetPos = new THREE.Vector3(coords.x, coords.y, coords.z);
+        const offset = targetPos.clone().normalize().multiplyScalar(0.4);
+        const camTarget = targetPos.clone().add(offset);
+        camera.position.lerp(camTarget, 0.03);
+        camera.lookAt(targetPos);
+      };
+
+      const updateSatellitePositions = (now: Date) => {
+        const filtered = getFiltered();
+        spritesRef.current.forEach((sprite, listIdx) => {
+          const sat = filtered[listIdx];
+          if (!sat) {
+            sprite.visible = false;
+            return;
+          }
+          const geo = propagateToGeodetic(sat.satrec, now);
+          if (!geo) {
+            sprite.visible = false;
+            return;
+          }
+          const runtime = satellitesRef.current[sat.index];
+          if (runtime) runtime.lastGeo = geo;
+          const pos = geoTo3D(geo.lat, geo.lon, geo.alt);
+          sprite.position.set(pos.x, pos.y, pos.z);
+          sprite.visible = true;
+          const selected = selectedIndexRef.current === sat.index;
+          sprite.material.opacity = selected ? 1 : 0.55;
+          sprite.material.color.set(selected ? 0xffffff : categoryColorInt(sat.category));
+          const dist = camera.position.distanceTo(sprite.position);
+          const baseScale = selected ? 0.062 : 0.032;
+          const scale = baseScale * Math.max(0.5, dist * 0.35);
+          sprite.scale.set(scale, scale, 1);
+        });
+      };
+
+      const onPointerDown = (event: PointerEvent) => {
+        orbitControls.isDragging = true;
+        orbitControls.autoRotate = false;
+        orbitControls.lastMouse = { x: event.clientX, y: event.clientY };
+        mount.setPointerCapture(event.pointerId);
+      };
+
+      const onPointerMove = (event: PointerEvent) => {
+        if (!orbitControls.isDragging) return;
+        const dx = event.clientX - orbitControls.lastMouse.x;
+        const dy = event.clientY - orbitControls.lastMouse.y;
+        orbitControls.velocity.theta -= dx * orbitControls.rotateSpeed;
+        orbitControls.velocity.phi -= dy * orbitControls.rotateSpeed;
+        orbitControls.lastMouse = { x: event.clientX, y: event.clientY };
+      };
+
+      const onPointerUp = (event: PointerEvent) => {
+        orbitControls.isDragging = false;
+        if (mount.hasPointerCapture(event.pointerId)) mount.releasePointerCapture(event.pointerId);
+      };
+
+      const onWheel = (event: WheelEvent) => {
+        event.preventDefault();
+        orbitControls.autoRotate = false;
+        const factor = event.deltaY > 0 ? 1 + orbitControls.zoomSpeed : 1 - orbitControls.zoomSpeed;
+        orbitControls.targetRadius = Math.max(1.15, Math.min(20, orbitControls.targetRadius * factor));
+      };
+
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+      const onClick = (event: MouseEvent) => {
+        const rect = renderer!.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(spritesRef.current);
+        if (hits.length > 0) {
+          const idx = hits[0].object.userData.satIdx as number;
+          if (idx !== undefined) selectSatelliteRef.current(idx);
+        } else {
+          setSelectedIndex(-1);
+          setFollowMode(false);
         }
       };
-      rebuildRef.current();
+
+      mount.addEventListener("pointerdown", onPointerDown);
+      mount.addEventListener("pointermove", onPointerMove);
+      mount.addEventListener("pointerup", onPointerUp);
+      mount.addEventListener("pointercancel", onPointerUp);
+      mount.addEventListener("wheel", onWheel, { passive: false });
+      mount.addEventListener("click", onClick);
 
       const onResize = () => {
         camera.aspect = mount.clientWidth / mount.clientHeight;
@@ -377,57 +484,80 @@ export function GlobeTracker() {
       window.addEventListener("resize", onResize);
 
       const animate = () => {
-        if (!pausedRef.current) {
-          rotationRef.current.y += 0.0012;
-          clouds.rotation.y += 0.0005;
+        if (disposed) return;
+        const now = new Date();
+        if (earth) earth.rotation.y += 0.0005;
+        if (clouds) clouds.rotation.y += 0.0007;
+        updateSatellitePositions(now);
+        if (followModeRef.current) updateFollowMode();
+        else updateOrbitControls();
+        if (selectedIndexRef.current >= 0) {
+          const sat = satellitesRef.current[selectedIndexRef.current];
+          if (sat?.lastGeo) {
+            frameCounterRef.current += 1;
+            if (frameCounterRef.current % 20 === 0) {
+              const nextGeo = sat.lastGeo;
+              if (
+                !liveGeoRef.current ||
+                Math.abs(liveGeoRef.current.lat - nextGeo.lat) > 0.0001 ||
+                Math.abs(liveGeoRef.current.lon - nextGeo.lon) > 0.0001
+              ) {
+                liveGeoRef.current = nextGeo;
+                setLiveGeo(nextGeo);
+              }
+            }
+            if (frameCounterRef.current % 60 === 0) {
+              const canvas = miniMapRef.current;
+              if (canvas) drawMiniMap(canvas, sat.satrec, sat.lastGeo);
+            }
+          }
         }
-        globe.rotation.x = rotationRef.current.x;
-        globe.rotation.y = rotationRef.current.y;
-        camera.position.z = rotationRef.current.zoom;
         renderer?.render(scene, camera);
         animId = requestAnimationFrame(animate);
       };
       animate();
 
       fetchPositions(160, false, ctrl.signal)
-        .then((payload) => {
-          if (disposed) return;
-          setPositions(payload.positions);
-          writeSessionCache(payload.positions);
-          setSource(payload.source);
-          setUpdated(payload.updated);
-          setStatus(`Tracking ${payload.positions.length} objects`);
-        })
-        .catch(() => {
-          if (!disposed) setStatus("Using cached orbital data");
-        });
+        .then((payload) => applyPayload(payload))
+        .catch(() => setStatus("Using cached orbital data"));
 
       fetchPositions(350, false, ctrl.signal)
         .then((payload) => {
-          if (disposed || payload.positions.length < positionsRef.current.length) return;
-          setPositions(payload.positions);
-          writeSessionCache(payload.positions);
-          setSource(payload.source);
-          setUpdated(payload.updated);
-          setStatus(`Tracking ${payload.positions.length} objects`);
+          if (payload.positions.length >= satellitesRef.current.length) applyPayload(payload);
         })
-        .catch(() => {
-          /* The initial paint already has cached or fallback data. */
-        });
+        .catch(() => {});
+
+      function applyPayload(payload: { positions: TrackerSatellite[]; source: string; updated?: string }) {
+        if (disposed) return;
+        const runtime = toRuntimeList(payload.positions);
+        if (!runtime.length) return;
+        setSatellites(runtime);
+        writeSessionCache(payload.positions);
+        setSource(payload.source);
+        setUpdated(payload.updated);
+        setStatus(`Tracking ${runtime.length} objects`);
+      }
 
       return () => {
         ctrl.abort();
-        window.removeEventListener("resize", onResize);
         cancelAnimationFrame(animId);
-        clearGroup(pointsGroup);
-        clearGroup(selectedGroup);
-        earth.geometry.dispose();
+        window.removeEventListener("resize", onResize);
+        mount.removeEventListener("pointerdown", onPointerDown);
+        mount.removeEventListener("pointermove", onPointerMove);
+        mount.removeEventListener("pointerup", onPointerUp);
+        mount.removeEventListener("pointercancel", onPointerUp);
+        mount.removeEventListener("wheel", onWheel);
+        mount.removeEventListener("click", onClick);
+        clearSprites();
+        Object.values(spriteMaterialCache).forEach((material) => material.dispose());
+        Object.values(spriteTextureCache).forEach((texture) => texture.dispose());
+        earth?.geometry.dispose();
         earthMaterial.map?.dispose();
         earthMaterial.roughnessMap?.dispose();
         earthMaterial.dispose();
-        clouds.geometry.dispose();
-        clouds.material.map?.dispose();
-        clouds.material.dispose();
+        clouds?.geometry.dispose();
+        cloudMaterial.map?.dispose();
+        cloudMaterial.dispose();
         renderer?.dispose();
         if (renderer?.domElement.parentElement === mount) mount.removeChild(renderer.domElement);
       };
@@ -444,32 +574,70 @@ export function GlobeTracker() {
     };
   }, []);
 
-  const focusSatellite = useCallback((sat: SatPoint) => {
-    const latRad = sat.lat * (Math.PI / 180);
-    const lonRad = sat.lon * (Math.PI / 180);
-    rotationRef.current.x = Math.max(-0.85, Math.min(0.85, -latRad * 0.75));
-    rotationRef.current.y = -lonRad - Math.PI / 2;
-    rotationRef.current.zoom = 2.55;
-    setSelected(sat);
+  const selectSatellite = useCallback((index: number) => {
+    setSelectedIndex(index);
+    const sat = satellitesRef.current[index];
+    if (sat) {
+      const geo = propagateToGeodetic(sat.satrec) || {
+        lat: sat.lat,
+        lon: sat.lon,
+        alt: sat.alt,
+        vel: sat.velocity || 7.8,
+      };
+      sat.lastGeo = geo;
+      setLiveGeo(geo);
+      const canvas = miniMapRef.current;
+      if (canvas) drawMiniMap(canvas, sat.satrec, geo);
+    }
+    rebuildSpritesRef.current?.();
   }, []);
 
-  const followSatellite = useCallback((sat: SatPoint) => {
-    setFollowed(sat);
-    setIsPaused(true);
-    focusSatellite(sat);
-  }, [focusSatellite]);
+  useEffect(() => {
+    selectSatelliteRef.current = selectSatellite;
+  }, [selectSatellite]);
 
-  const resetFollow = useCallback(() => {
-    setFollowed(null);
-    setSelected(null);
-    setIsPaused(false);
-    rotationRef.current = { x: 0.22, y: -0.42, zoom: 3.15 };
+  const toggleFollowMode = useCallback(() => {
+    if (selectedIndex < 0) {
+      setRefreshError("Select a satellite first");
+      return;
+    }
+    setFollowMode((value) => {
+      const next = !value;
+      if (!next && orbitControlsRef.current && cameraRef.current) {
+        orbitControlsRef.current.spherical.setFromVector3(
+          cameraRef.current.position.clone().sub(orbitControlsRef.current.target)
+        );
+        orbitControlsRef.current.autoRotate = true;
+      }
+      if (next && orbitControlsRef.current) orbitControlsRef.current.autoRotate = false;
+      return next;
+    });
+    setRefreshError("");
+  }, [selectedIndex]);
+
+  const toggleListFollow = useCallback(
+    (index: number) => {
+      if (selectedIndex === index && followMode) {
+        setFollowMode(false);
+        setSelectedIndex(-1);
+        setLiveGeo(null);
+        if (orbitControlsRef.current) orbitControlsRef.current.autoRotate = true;
+        return;
+      }
+      selectSatellite(index);
+      setFollowMode(true);
+      if (orbitControlsRef.current) orbitControlsRef.current.autoRotate = false;
+    },
+    [followMode, selectSatellite, selectedIndex]
+  );
+
+  const deselectSatellite = useCallback(() => {
+    setSelectedIndex(-1);
+    setFollowMode(false);
+    setLiveGeo(null);
+    if (orbitControlsRef.current) orbitControlsRef.current.autoRotate = true;
+    rebuildSpritesRef.current?.();
   }, []);
-
-  const toggleFollow = useCallback((sat: SatPoint) => {
-    if (followed?.name === sat.name) resetFollow();
-    else followSatellite(sat);
-  }, [followSatellite, followed?.name, resetFollow]);
 
   async function refresh() {
     if (isRefreshing) return;
@@ -478,16 +646,19 @@ export function GlobeTracker() {
     setStatus("Refreshing orbital data...");
     try {
       const payload = await fetchPositions(350, true);
-      const offset = payload.positions.length > 1 ? Math.floor(Math.random() * Math.min(24, payload.positions.length)) : 0;
-      const rotated = [...payload.positions.slice(offset), ...payload.positions.slice(0, offset)];
-      setPositions(rotated);
-      writeSessionCache(rotated);
+      const runtime = toRuntimeList(payload.positions);
+      if (!runtime.length) throw new Error("No satellites returned");
+      setSatellites(runtime);
+      writeSessionCache(payload.positions);
       setSource(payload.source);
       setUpdated(payload.updated);
-      setStatus(`Refreshed ${rotated.length} objects`);
-      if (followed) {
-        const nextFollowed = rotated.find((sat) => sat.name === followed.name);
-        if (nextFollowed) focusSatellite(nextFollowed);
+      setStatus(`Refreshed ${runtime.length} objects`);
+      if (selectedIndex >= 0) {
+        const next = runtime.find((sat) => sat.name === satellitesRef.current[selectedIndex]?.name);
+        if (next) {
+          const idx = runtime.indexOf(next);
+          selectSatellite(idx);
+        }
       }
     } catch (error) {
       setRefreshError(error instanceof Error ? error.message : "Refresh failed");
@@ -497,25 +668,7 @@ export function GlobeTracker() {
     }
   }
 
-  function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    dragRef.current = { x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    if (!dragRef.current) return;
-    const dx = event.clientX - dragRef.current.x;
-    const dy = event.clientY - dragRef.current.y;
-    rotationRef.current.y += dx * 0.006;
-    rotationRef.current.x = Math.max(-0.85, Math.min(0.85, rotationRef.current.x + dy * 0.004));
-    dragRef.current = { x: event.clientX, y: event.clientY };
-  }
-
-  function onPointerUp() {
-    dragRef.current = null;
-  }
-
-  const activeSatellite = followed || selected || visible[0] || null;
+  const activeGeo = liveGeo || (selectedSatellite ? propagateToGeodetic(selectedSatellite.satrec) : null);
 
   return (
     <section className="tracker-shell">
@@ -527,13 +680,40 @@ export function GlobeTracker() {
           </p>
         </div>
         <div className="tracker-actions">
-          <button type="button" className="tracker-icon-btn" onClick={() => setIsPaused((value) => !value)}>
-            {isPaused ? "Resume" : "Pause"}
+          <button
+            type="button"
+            className={`tracker-icon-btn ${followMode ? "is-active" : ""}`}
+            onClick={toggleFollowMode}
+            aria-pressed={followMode}
+          >
+            {followMode ? "Following" : "Follow"}
           </button>
-          <button type="button" className="tracker-icon-btn" onClick={() => (rotationRef.current.zoom = Math.max(2.35, rotationRef.current.zoom - 0.22))}>
+          <button
+            type="button"
+            className="tracker-icon-btn"
+            onClick={() => {
+              if (!orbitControlsRef.current) return;
+              orbitControlsRef.current.targetRadius = Math.max(
+                1.15,
+                orbitControlsRef.current.targetRadius * 0.88
+              );
+              orbitControlsRef.current.autoRotate = false;
+            }}
+          >
             Zoom in
           </button>
-          <button type="button" className="tracker-icon-btn" onClick={() => (rotationRef.current.zoom = Math.min(4.2, rotationRef.current.zoom + 0.22))}>
+          <button
+            type="button"
+            className="tracker-icon-btn"
+            onClick={() => {
+              if (!orbitControlsRef.current) return;
+              orbitControlsRef.current.targetRadius = Math.min(
+                20,
+                orbitControlsRef.current.targetRadius * 1.12
+              );
+              orbitControlsRef.current.autoRotate = false;
+            }}
+          >
             Zoom out
           </button>
           <button type="button" className="tracker-refresh" onClick={refresh} disabled={isRefreshing}>
@@ -548,10 +728,6 @@ export function GlobeTracker() {
           className="tracker-canvas"
           role="img"
           aria-label="Interactive 3D globe with live satellite positions"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
         >
           <div className="tracker-canvas-status">{earthStatus}</div>
         </div>
@@ -580,53 +756,71 @@ export function GlobeTracker() {
                 onClick={() => setFilter(item.id)}
               >
                 <span>{item.label}</span>
-                <small>{item.id === "all" ? positions.length : categoryCounts[item.id] || 0}</small>
+                <small>{item.id === "all" ? satellites.length : categoryCounts[item.id] || 0}</small>
               </button>
             ))}
           </div>
 
-          {activeSatellite && (
+          {selectedSatellite && activeGeo && (
             <div className="tracker-selected">
-              <p className="font-mono text-[0.68rem] uppercase text-[var(--accent)]">Selected</p>
-              <h2>{activeSatellite.name}</h2>
+              <div className="tracker-selected-head">
+                <p className="font-mono text-[0.68rem] uppercase text-[var(--accent)]">Selected</p>
+                <button type="button" className="tracker-follow-btn" onClick={deselectSatellite}>
+                  Close
+                </button>
+              </div>
+              <div className="tracker-selected-title">
+                <span className="tracker-list-emoji">{categoryEmoji(selectedSatellite.category)}</span>
+                <div>
+                  <h2>{selectedSatellite.name}</h2>
+                  <p className="tracker-source">NORAD {selectedSatellite.norad}</p>
+                </div>
+              </div>
               <dl>
                 <div>
                   <dt>Latitude</dt>
-                  <dd>{activeSatellite.lat.toFixed(2)}</dd>
+                  <dd>{activeGeo.lat.toFixed(4)}°</dd>
                 </div>
                 <div>
                   <dt>Longitude</dt>
-                  <dd>{activeSatellite.lon.toFixed(2)}</dd>
+                  <dd>{activeGeo.lon.toFixed(4)}°</dd>
                 </div>
                 <div>
                   <dt>Altitude</dt>
-                  <dd>{Math.round(activeSatellite.alt).toLocaleString()} km</dd>
+                  <dd>{Math.round(activeGeo.alt).toLocaleString()} km</dd>
+                </div>
+                <div>
+                  <dt>Velocity</dt>
+                  <dd>{activeGeo.vel.toFixed(2)} km/s</dd>
+                </div>
+                <div>
+                  <dt>Orbit</dt>
+                  <dd>{orbitTypeLabel(activeGeo.alt)}</dd>
+                </div>
+                <div>
+                  <dt>Category</dt>
+                  <dd>{selectedSatellite.category.toUpperCase()}</dd>
                 </div>
               </dl>
+              <canvas ref={miniMapRef} className="tracker-mini-map" width={280} height={128} aria-label="Ground track mini map" />
               <p className="tracker-source">Source: {source}</p>
               <div className="model-controls">
-                {followed?.name === activeSatellite.name ? (
-                  <button type="button" onClick={resetFollow}>
-                    Reset view
-                  </button>
-                ) : (
-                  <button type="button" onClick={() => followSatellite(activeSatellite)}>
-                    Follow
-                  </button>
-                )}
+                <button type="button" className={followMode ? "is-active" : ""} onClick={toggleFollowMode}>
+                  {followMode ? "Stop following" : "Follow satellite"}
+                </button>
               </div>
             </div>
           )}
 
           <div className="tracker-list" aria-label="Visible satellites">
-            {visible.slice(0, 9).map((sat) => (
+            {visible.slice(0, 12).map((sat) => (
               <SatelliteListItem
-                key={`${sat.name}-${sat.lat}-${sat.lon}`}
+                key={`${sat.name}-${sat.norad}`}
                 sat={sat}
-                isSelected={selected?.name === sat.name}
-                isFollowed={followed?.name === sat.name}
-                onSelect={setSelected}
-                onFollowToggle={toggleFollow}
+                isSelected={selectedIndex === sat.index}
+                isFollowed={followMode && selectedIndex === sat.index}
+                onSelect={selectSatellite}
+                onFollowToggle={toggleListFollow}
               />
             ))}
           </div>

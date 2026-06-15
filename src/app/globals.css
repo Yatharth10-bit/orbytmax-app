@@ -618,6 +618,42 @@ button:disabled {
   background: #ffeaf4;
 }
 
+.tracker-list-emoji {
+  display: inline-block;
+  margin-right: 0.35rem;
+  font-size: 0.95rem;
+}
+
+.tracker-icon-btn.is-active,
+.model-controls button.is-active,
+.tracker-follow-btn.is-active {
+  background: #ffeaf4;
+  border-color: #ff5fa2;
+}
+
+.tracker-selected-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tracker-selected-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.tracker-mini-map {
+  display: block;
+  width: 100%;
+  margin-top: 0.85rem;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: #020d1a;
+}
+
 .tracker-selected {
   border: 2px solid var(--border);
   border-radius: 18px;

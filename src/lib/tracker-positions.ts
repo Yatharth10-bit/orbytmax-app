@@ -9,6 +9,10 @@ export type TrackerPosition = {
   lon: number;
   alt: number;
   category: string;
+  tle1: string;
+  tle2: string;
+  norad: string;
+  velocity: number;
 };
 
 type CachedPayload = {
@@ -68,6 +72,10 @@ function computePositions(tle: string, limit: number): TrackerPosition[] {
       lon: pos.lon,
       alt: pos.altKm,
       category: categorizeByName(rec.name),
+      tle1: rec.tle1,
+      tle2: rec.tle2,
+      norad: rec.norad,
+      velocity: pos.velocityKmS,
     });
     if (positions.length >= limit) break;
   }
