@@ -10,6 +10,7 @@ const links = [
   { href: "/sky-tonight", label: "Sky Tonight" },
   { href: "/satellites", label: "Satellites" },
   { href: "/education", label: "Education" },
+  { href: "/black-hole-visualizer", label: "Black hole" },
 ];
 
 export function SiteNav() {

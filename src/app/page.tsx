@@ -23,6 +23,11 @@ const features = [
     desc: "Inspect satellite parts with simple explanations.",
     href: "/education",
   },
+  {
+    title: "Visualize a black hole",
+    desc: "Explore spacetime, light bending, and a glowing accretion disk.",
+    href: "/black-hole-visualizer",
+  },
 ];
 
 export default function HomePage() {
