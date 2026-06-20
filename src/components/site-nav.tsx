@@ -16,19 +16,21 @@ const links = [
 export function SiteNav() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const orbitalTheme = pathname === "/black-hole-visualizer";
 
   return (
-    <header className="sticky top-0 z-50 border-b-2 border-[var(--border)] bg-[var(--paper)]">
+    <header className={`site-nav sticky top-0 z-50 border-b-2 border-[var(--border)] bg-[var(--paper)] ${orbitalTheme ? "site-nav--orbital" : ""}`}>
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <Link href="/" className="brand-wordmark flex items-center gap-2 font-extrabold text-[var(--text)]">
           <span className="inline-block h-4 w-4 rounded-full border-2 border-[var(--border)] bg-[var(--accent-2)]" />
           OrbytMax
         </Link>
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
+        <nav className="site-nav-links hidden items-center gap-1 md:flex" aria-label="Main">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
+              aria-current={pathname === link.href ? "page" : undefined}
               prefetch={link.href === "/tracker" ? true : undefined}
               className={`rounded-full border-2 px-3 py-1.5 text-sm font-bold transition-colors ${
                 pathname === link.href
@@ -57,11 +59,12 @@ export function SiteNav() {
           )}
         </div>
       </div>
-      <nav className="flex gap-2 overflow-x-auto border-t-2 border-[var(--border)] px-4 py-2 md:hidden" aria-label="Mobile">
+      <nav className="site-nav-mobile flex gap-2 overflow-x-auto border-t-2 border-[var(--border)] px-4 py-2 md:hidden" aria-label="Mobile">
         {links.map((link) => (
           <Link
             key={link.href}
             href={link.href}
+            aria-current={pathname === link.href ? "page" : undefined}
             className={`shrink-0 rounded-full border-2 px-3 py-1 text-xs font-bold ${
               pathname === link.href
                 ? "border-[var(--border)] bg-[var(--accent-2)] text-[var(--text)]"
