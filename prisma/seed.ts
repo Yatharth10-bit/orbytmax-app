@@ -58,6 +58,7 @@ async function upsertSatelliteCatalog() {
         where: { satelliteId: satellite.id },
         create: {
           satelliteId: satellite.id,
+          modelUrl: sat.model.modelUrl,
           fallbackType: sat.model.fallbackType,
           attribution: sat.model.attribution,
           embedUid: sat.model.embedUid,
@@ -66,6 +67,7 @@ async function upsertSatelliteCatalog() {
           modificationAllowed: sat.model.modificationAllowed ?? false,
         },
         update: {
+          modelUrl: sat.model.modelUrl,
           fallbackType: sat.model.fallbackType,
           attribution: sat.model.attribution,
           embedUid: sat.model.embedUid,

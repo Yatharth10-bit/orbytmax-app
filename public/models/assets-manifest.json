@@ -1,0 +1,137 @@
+[
+  {
+    "id": "iss",
+    "file": "/models/iss.glb",
+    "source": "https://science.nasa.gov/3d-resources/international-space-station-iss-b/",
+    "license": "NASA public 3D resource; NASA media usage guidelines apply",
+    "credit": "NASA/Michael D. Carbajal",
+    "dateChecked": "2026-07-31",
+    "notes": "Official NASA glTF model used for the ISS inspect viewer."
+  },
+  {
+    "id": "goes-18",
+    "file": "/models/goes-r.glb",
+    "source": "https://www.goes-r.gov/3dModelAR/",
+    "license": "NOAA/NASA public educational model; agency usage guidelines apply",
+    "credit": "NASA Visualization Technology Applications and Development (VTAD)",
+    "dateChecked": "2026-07-31",
+    "notes": "GOES-R Series model used for GOES-18 because GOES-18 is part of the GOES-R series."
+  },
+  {
+    "id": "chandrayaan-3",
+    "file": "/models/chandrayaan-3.glb",
+    "source": "https://www.isro.gov.in/Chandrayaan3_Details.html",
+    "license": "Original OrbytMax educational model generated for this project; not an official ISRO CAD asset",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified low-poly model based on publicly visible Chandrayaan-3 lander, rover, propulsion module, and mission details."
+  },
+  {
+    "id": "hubble",
+    "file": "/models/hubble.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified space telescope model with named Bus, SolarPanels, Antenna, Payload, and Thrusters."
+  },
+  {
+    "id": "starlink-1007",
+    "file": "/models/starlink-1007.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified flat-panel satellite model."
+  },
+  {
+    "id": "mangalyaan",
+    "file": "/models/mangalyaan.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified planetary orbiter model."
+  },
+  {
+    "id": "insat-3dr",
+    "file": "/models/insat-3dr.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified GEO weather satellite model."
+  },
+  {
+    "id": "cartosat-2",
+    "file": "/models/cartosat-2.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified Earth-observation satellite model."
+  },
+  {
+    "id": "risat-2b",
+    "file": "/models/risat-2b.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified radar satellite model."
+  },
+  {
+    "id": "oceansat-2",
+    "file": "/models/oceansat-2.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified ocean-monitoring satellite model."
+  },
+  {
+    "id": "resourcesat-2a",
+    "file": "/models/resourcesat-2a.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified resource-monitoring satellite model."
+  },
+  {
+    "id": "navic-irnss-1i",
+    "file": "/models/navic-irnss-1i.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified navigation satellite model."
+  },
+  {
+    "id": "landsat-9",
+    "file": "/models/landsat-9.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified Earth-observation satellite model."
+  },
+  {
+    "id": "noaa-20",
+    "file": "/models/noaa-20.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified polar weather satellite model."
+  },
+  {
+    "id": "sentinel-2a",
+    "file": "/models/sentinel-2a.glb",
+    "source": "OrbytMax seed mission catalog",
+    "license": "Original OrbytMax educational model generated for this project",
+    "credit": "OrbytMax",
+    "dateChecked": "2026-07-31",
+    "notes": "Simplified Copernicus-style Earth-observation satellite model."
+  }
+]

@@ -1,4 +1,4 @@
-import * as satellite from "satellite.js";
+import * as satellite from "@/lib/satellite-js-pure";
 
 export const EARTH_RADIUS_KM = 6371;
 export const EARTH_RADIUS_3D = 1;
@@ -6,6 +6,7 @@ export const ALT_SCALE = EARTH_RADIUS_3D / EARTH_RADIUS_KM;
 
 export type TrackerSatellite = {
   name: string;
+  slug?: string;
   lat: number;
   lon: number;
   alt: number;

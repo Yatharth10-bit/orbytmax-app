@@ -20,6 +20,7 @@ export type SeedSatellite = {
   model?: {
     fallbackType: string;
     attribution: string;
+    modelUrl?: string;
     embedUid?: string;
     sourceUrl?: string;
     commercialUseAllowed?: boolean;
@@ -56,8 +57,10 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     ],
     relatedSlugs: ["hubble", "starlink-1007"],
     model: {
-      fallbackType: "procedural-station",
-      attribution: "Procedural ISS-style model · OrbytMax",
+      fallbackType: "official-glb",
+      modelUrl: "/models/iss.glb",
+      sourceUrl: "https://science.nasa.gov/3d-resources/international-space-station-iss-b/",
+      attribution: "International Space Station (ISS) (B) · NASA/Michael D. Carbajal",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -83,8 +86,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     timeline: [{ date: "1990", title: "Launched aboard Discovery" }],
     relatedSlugs: ["iss"],
     model: {
-      fallbackType: "science-observatory",
-      attribution: "Procedural observatory model · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/hubble.glb",
+      attribution: "Original simplified educational Hubble model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -109,8 +113,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     timeline: [{ date: "2019", title: "First operational Starlink launch" }],
     relatedSlugs: ["iss"],
     model: {
-      fallbackType: "procedural-flat-sat",
-      attribution: "Procedural flat-panel satellite · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/starlink-1007.glb",
+      attribution: "Original simplified educational Starlink model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -136,8 +141,10 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     ],
     relatedSlugs: ["mangalyaan", "insat-3dr"],
     model: {
-      fallbackType: "lunar-orbiter",
-      attribution: "Procedural lunar mission model · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/chandrayaan-3.glb",
+      sourceUrl: "https://www.isro.gov.in/Chandrayaan3_Details.html",
+      attribution: "Original simplified educational Chandrayaan-3 model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -161,8 +168,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     timeline: [{ date: "2014-09", title: "Entered Mars orbit" }],
     relatedSlugs: ["chandrayaan-3"],
     model: {
-      fallbackType: "planetary-orbiter",
-      attribution: "Procedural planetary orbiter · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/mangalyaan.glb",
+      attribution: "Original simplified educational Mangalyaan model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -185,8 +193,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Improves cyclone tracking over the Indian Ocean.", "Supports disaster response communications."],
     timeline: [{ date: "2016", title: "Placed in geostationary orbit" }],
     model: {
-      fallbackType: "geo-comms",
-      attribution: "Procedural GEO weather model · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/insat-3dr.glb",
+      attribution: "Original simplified educational INSAT-3DR model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -207,8 +216,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Sub-meter class imaging capability.", "Supports national mapping programs."],
     timeline: [{ date: "2007", title: "First Cartosat-2 launch" }],
     model: {
-      fallbackType: "earth-observer",
-      attribution: "Procedural imaging satellite · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/cartosat-2.glb",
+      attribution: "Original simplified educational Cartosat-2 model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -229,8 +239,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Radar can see through cloud cover.", "Useful for agriculture and disaster monitoring."],
     timeline: [{ date: "2019", title: "Launched on PSLV" }],
     model: {
-      fallbackType: "radar-sat",
-      attribution: "Procedural SAR model · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/risat-2b.glb",
+      attribution: "Original simplified educational RISAT-2B model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -251,8 +262,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Helps track phytoplankton blooms.", "Scatterometer data aids cyclone forecasting."],
     timeline: [{ date: "2009", title: "Operational ocean mission begins" }],
     model: {
-      fallbackType: "earth-observer",
-      attribution: "Procedural ocean satellite · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/oceansat-2.glb",
+      attribution: "Original simplified educational Oceansat-2 model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -273,8 +285,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Three sensors cover different resolutions.", "Data supports crop health mapping."],
     timeline: [{ date: "2016", title: "Launched on PSLV" }],
     model: {
-      fallbackType: "earth-observer",
-      attribution: "Procedural resource satellite · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/resourcesat-2a.glb",
+      attribution: "Original simplified educational Resourcesat-2A model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -296,8 +309,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Seven-satellite constellation design.", "Improves positioning accuracy for civilian users."],
     timeline: [{ date: "2018", title: "IRNSS-1I operational" }],
     model: {
-      fallbackType: "navigation-sat",
-      attribution: "Procedural navigation satellite · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/navic-irnss-1i.glb",
+      attribution: "Original simplified educational NavIC IRNSS-1I model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -319,8 +333,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Data is free and open.", "Sun-synchronous orbit enables consistent lighting."],
     timeline: [{ date: "2021", title: "Launched from Vandenberg" }],
     model: {
-      fallbackType: "earth-observer",
-      attribution: "Procedural Landsat-style model · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/landsat-9.glb",
+      attribution: "Original simplified educational Landsat 9 model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -341,8 +356,10 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Images update every few minutes in mesoscale mode.", "Helps track hurricanes and wildfires."],
     timeline: [{ date: "2022", title: "Declared operational GOES-West" }],
     model: {
-      fallbackType: "geo-comms",
-      attribution: "Procedural weather satellite · OrbytMax",
+      fallbackType: "official-glb",
+      modelUrl: "/models/goes-r.glb",
+      sourceUrl: "https://www.goes-r.gov/3dModelAR/",
+      attribution: "GOES-R Series 3D model · NASA Visualization Technology Applications and Development (VTAD)",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -363,8 +380,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Part of the JPSS program.", "Feeds numerical weather prediction models."],
     timeline: [{ date: "2017", title: "Launched on Delta II" }],
     model: {
-      fallbackType: "earth-observer",
-      attribution: "Procedural polar weather satellite · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/noaa-20.glb",
+      attribution: "Original simplified educational NOAA-20 model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },
@@ -385,8 +403,9 @@ export const SEED_SATELLITES: SeedSatellite[] = [
     facts: ["Revisits the same area every five days with twin satellites.", "13 spectral bands."],
     timeline: [{ date: "2015", title: "First Sentinel-2 launch" }],
     model: {
-      fallbackType: "earth-observer",
-      attribution: "Procedural Copernicus-style model · OrbytMax",
+      fallbackType: "original-educational-glb",
+      modelUrl: "/models/sentinel-2a.glb",
+      attribution: "Original simplified educational Sentinel-2A model · OrbytMax",
       commercialUseAllowed: true,
       modificationAllowed: true,
     },

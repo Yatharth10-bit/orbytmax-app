@@ -15,8 +15,8 @@ export function MissionDetail({
   return (
     <article className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
       <nav className="flex flex-wrap gap-2 text-sm font-bold text-[var(--muted)]" aria-label="Breadcrumb">
-        <Link href="/education" className="hover:text-[var(--text)]">
-          Education
+        <Link href="/explore#education" className="hover:text-[var(--text)]">
+          Explore
         </Link>
         <span>/</span>
         <Link href={backHref} className="hover:text-[var(--text)]">
@@ -43,7 +43,7 @@ export function MissionDetail({
       </header>
 
       <section className="mt-10 grid gap-6 lg:grid-cols-[1fr_0.8fr]">
-        <div className="card bg-[#e9f7ff]">
+        <div className="card mission-detail-card mission-file-card">
           <span className="sticker-tag">Mission file</span>
           <dl className="mt-5 grid gap-3 sm:grid-cols-2">
             {[
@@ -52,7 +52,7 @@ export function MissionDetail({
               ["Category", mission.category],
               ["Orbit", mission.orbitType],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-[14px] border-2 border-[var(--border)] bg-white p-3">
+              <div key={label} className="mission-info-cell">
                 <dt className="font-mono text-[0.68rem] font-bold uppercase text-[var(--muted)]">{label}</dt>
                 <dd className="mt-1 break-words font-bold">{value}</dd>
               </div>
@@ -60,11 +60,11 @@ export function MissionDetail({
           </dl>
         </div>
 
-        <div className="card bg-[#fff9e8]">
+        <div className="card mission-detail-card mission-facts-card">
           <span className="sticker-tag">Key facts</span>
           <ul className="mt-4 grid gap-3">
             {mission.facts.map((fact) => (
-              <li key={fact} className="rounded-[14px] border-2 border-[var(--border)] bg-white p-3 text-[var(--muted)]">
+              <li key={fact} className="mission-fact-item">
                 {fact}
               </li>
             ))}
@@ -82,6 +82,7 @@ export function MissionDetail({
             <SatelliteModelPanel
               attribution={mission.model.attribution}
               fallbackType={mission.model.fallbackType}
+              modelUrl={mission.model.modelUrl}
               name={mission.name}
             />
           </div>

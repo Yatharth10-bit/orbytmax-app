@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { SectionHeader } from "@/components/neo-ui";
 import { SATELLITE_PARTS } from "@/lib/education-content";
 
@@ -16,10 +17,17 @@ export default function SatellitePartsPage() {
       />
 
       <section className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Satellite parts">
-        {SATELLITE_PARTS.map((part, index) => (
+        {SATELLITE_PARTS.map((part) => (
           <article key={part.slug} className="part-card">
-            <div className="part-diagram" aria-hidden="true">
-              <span className={`part-shape part-shape-${(index % 6) + 1}`} />
+            <div className="part-diagram">
+              <Image
+                src={part.imageUrl}
+                alt={`${part.name} illustration`}
+                width={640}
+                height={360}
+                loading="eager"
+                unoptimized
+              />
             </div>
             <span className="sticker-tag">{part.signal}</span>
             <h2>{part.name}</h2>

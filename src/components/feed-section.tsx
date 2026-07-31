@@ -125,22 +125,30 @@ export function FeedSection() {
       )}
 
       {!loading && !error && items.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (
-            <article key={item.id} className="card flex min-h-56 flex-col bg-[#fff9e8]">
-              <span className="sticker-tag">{item.category}</span>
-              <h3 className="mt-4 text-xl font-extrabold uppercase leading-none">{item.title}</h3>
-              <p className="mt-2 flex-1 text-sm text-[var(--muted)]">{item.summary}</p>
-              <p className="mt-3 break-words font-mono text-xs text-[var(--muted)]">
-                {item.agency} / {item.missionType || "Mission"} / {item.orbitType || "Orbit"}
-              </p>
-              {item.satellite && (
+            <article key={item.id} className="card feed-card">
+              <span className="sticker-tag">{item.agency || item.category}</span>
+              <h3>{item.title}</h3>
+              <p>{item.summary}</p>
+              <div className="card-chip-row">
+                {[item.missionType || item.category, item.orbitType || "Orbit"].slice(0, 2).map((chip) => (
+                  <span key={chip} className="card-chip">
+                    {chip}
+                  </span>
+                ))}
+              </div>
+              {item.satellite ? (
                 <Link
                   href={`/satellite/${item.satellite.slug}`}
-                  className="btn-secondary mt-4 text-sm"
+                  className="card-text-link mt-4"
                 >
-                  View details
+                  View details →
                 </Link>
+              ) : (
+                <span className="card-text-link mt-4" aria-hidden="true">
+                  Read update →
+                </span>
               )}
             </article>
           ))}

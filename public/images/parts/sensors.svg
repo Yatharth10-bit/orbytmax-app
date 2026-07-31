@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite sensors">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff8ea"/><stop offset="1" stop-color="#eaf5f8"/></linearGradient><radialGradient id="eye"><stop stop-color="#fff"/><stop offset=".28" stop-color="#8ee8ff"/><stop offset="1" stop-color="#173655"/></radialGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".18"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g opacity=".25" stroke="#748696"><path d="M100 90h440M100 270h440M140 58v244M500 58v244"/></g>
+  <g filter="url(#s)" transform="translate(180 70)">
+    <rect x="70" y="56" width="140" height="120" rx="24" fill="#fff2df" stroke="#394350" stroke-width="6"/>
+    <circle cx="140" cy="116" r="42" fill="url(#eye)" stroke="#394350" stroke-width="6"/>
+    <circle cx="126" cy="102" r="10" fill="#fff" opacity=".8"/>
+    <path d="M70 104H8v28h62M210 104h62v28h-62" fill="#8fb4c3" stroke="#394350" stroke-width="6"/>
+    <path d="M140 56V24M140 176v32" stroke="#394350" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g fill="none" stroke="#f28c38" stroke-width="4" opacity=".72"><path d="M424 128l60-52M426 180l82 12M216 128l-60-52M214 180l-82 12"/></g>
+</svg>

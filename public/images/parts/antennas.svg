@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite antenna">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff6e8"/><stop offset="1" stop-color="#e8f4f1"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="16" stdDeviation="12" flood-color="#2a3340" flood-opacity=".18"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g opacity=".22" stroke="#748696"><path d="M82 274c116-74 277-74 438 0M124 238c91-48 230-48 364 0M166 203c73-31 178-31 310 0"/></g>
+  <g filter="url(#s)" transform="translate(148 58)">
+    <rect x="120" y="132" width="98" height="84" rx="18" fill="#fbf1de" stroke="#394350" stroke-width="5"/>
+    <path d="M169 132V74" stroke="#394350" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="169" cy="64" r="15" fill="#f28c38" stroke="#394350" stroke-width="5"/>
+    <path d="M218 154c84-54 130-38 130 0s-46 54-130 0Z" fill="#dff1f5" stroke="#587386" stroke-width="5"/>
+    <path d="M120 154C36 100-10 116-10 154s46 54 130 0Z" fill="#dff1f5" stroke="#587386" stroke-width="5"/>
+    <path d="M169 216v42" stroke="#394350" stroke-width="8" stroke-linecap="round"/>
+    <path d="M116 258h106" stroke="#394350" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <g fill="#f28c38"><circle cx="86" cy="86" r="7"/><circle cx="548" cy="112" r="5"/></g>
+</svg>

@@ -56,6 +56,24 @@ type OrbitControls = {
   targetRadius: number;
 };
 
+type TrackerTarget = {
+  slug: string;
+  norad: string;
+  name: string;
+  follow: boolean;
+};
+
+function readTrackerTarget(): TrackerTarget {
+  if (typeof window === "undefined") return { slug: "", norad: "", name: "", follow: false };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    slug: (params.get("satellite") || "").trim().toLowerCase(),
+    norad: (params.get("norad") || "").trim(),
+    name: (params.get("name") || "").trim().toLowerCase(),
+    follow: params.get("follow") === "1",
+  };
+}
+
 function readSessionCache(): TrackerSatellite[] | null {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
@@ -136,6 +154,7 @@ const SatelliteListItem = memo(function SatelliteListItem({
 export function GlobeTracker() {
   const mountRef = useRef<HTMLDivElement>(null);
   const miniMapRef = useRef<HTMLCanvasElement>(null);
+  const [trackerTarget] = useState(readTrackerTarget);
   const [status, setStatus] = useState("Starting globe...");
   const [earthStatus, setEarthStatus] = useState("Loading Earth...");
   const [source, setSource] = useState("embedded fallback");
@@ -161,6 +180,7 @@ export function GlobeTracker() {
   const selectSatelliteRef = useRef<(index: number) => void>(() => {});
   const liveGeoRef = useRef(liveGeo);
   const frameCounterRef = useRef(0);
+  const targetAppliedRef = useRef(false);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -596,6 +616,38 @@ export function GlobeTracker() {
     selectSatelliteRef.current = selectSatellite;
   }, [selectSatellite]);
 
+  useEffect(() => {
+    if (targetAppliedRef.current || !satellites.length) return;
+    if (!trackerTarget.slug && !trackerTarget.norad && !trackerTarget.name) return;
+
+    const index = satellites.findIndex((sat) => {
+      const satSlug = sat.slug?.toLowerCase();
+      const satName = sat.name.toLowerCase();
+      return (
+        (trackerTarget.slug && satSlug === trackerTarget.slug) ||
+        (trackerTarget.norad && sat.norad === trackerTarget.norad) ||
+        (trackerTarget.name &&
+          (satName === trackerTarget.name ||
+            satName.includes(trackerTarget.name) ||
+            trackerTarget.name.includes(satName)))
+      );
+    });
+
+    targetAppliedRef.current = true;
+    const matchedName = satellites[index].name;
+    const frame = window.requestAnimationFrame(() => {
+      setFilter("all");
+      setQuery("");
+      selectSatellite(index);
+      if (trackerTarget.follow) {
+        setFollowMode(true);
+        if (orbitControlsRef.current) orbitControlsRef.current.autoRotate = false;
+      }
+      setStatus(`${trackerTarget.follow ? "Following" : "Selected"} ${matchedName}`);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [satellites, selectSatellite, trackerTarget]);
+
   const toggleFollowMode = useCallback(() => {
     if (selectedIndex < 0) {
       setRefreshError("Select a satellite first");
@@ -674,10 +726,15 @@ export function GlobeTracker() {
     <section className="tracker-shell">
       <div className="tracker-toolbar">
         <div>
-          <p className="font-mono text-[0.68rem] uppercase text-[var(--accent)]">Live map</p>
+          <p className="font-mono text-[0.68rem] uppercase text-[var(--accent)]">Orbital status</p>
           <p className="mt-1 text-sm text-[var(--muted)]" role="status">
             {status} / showing {visible.length} / updated {formatUpdated(updated)}
           </p>
+          <div className="tracker-data-pills" aria-label="Live tracker data details">
+            <span>Source: {source}</span>
+            <span>{satellites.length} tracked objects</span>
+            <span>NORAD IDs shown</span>
+          </div>
         </div>
         <div className="tracker-actions">
           <button

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite thermal control blankets">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff3e2"/><stop offset="1" stop-color="#edf7fb"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff4a8"/><stop offset=".55" stop-color="#f3a53b"/><stop offset="1" stop-color="#9d5a25"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".18"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g filter="url(#s)" transform="translate(168 58)">
+    <rect x="70" y="42" width="168" height="178" rx="28" fill="url(#gold)" stroke="#394350" stroke-width="6"/>
+    <g stroke="#fff6bd" stroke-width="3" opacity=".7"><path d="M92 56l124 150M124 48l116 138M74 96l118 126M78 150l64 76"/></g>
+    <rect x="104" y="80" width="96" height="96" rx="18" fill="rgba(255,255,255,.24)" stroke="#394350" stroke-width="5"/>
+    <path d="M70 104H0v54h70M238 104h70v54h-70" fill="#dfe7e2" stroke="#394350" stroke-width="6"/>
+    <circle cx="152" cy="128" r="20" fill="#fff2df" stroke="#394350" stroke-width="5"/>
+  </g>
+  <path d="M92 90c32 22 32 68 0 90M548 90c-32 22-32 68 0 90" stroke="#f28c38" stroke-width="5" fill="none" opacity=".6"/>
+</svg>

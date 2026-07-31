@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { FALLBACK_TLE } from "@/lib/fallback-tle";
+import { hasUsablePostgresUrl } from "@/lib/database-status";
+import { SEED_SATELLITES } from "@/lib/seed-catalog";
 import { categorizeByName, propagateFromTle } from "@/lib/satellite-math";
 import { fetchLiveTle, parseTleRecords, selectMixedTle } from "@/lib/tle";
 
 export type TrackerPosition = {
   name: string;
+  slug?: string;
   lat: number;
   lon: number;
   alt: number;
@@ -25,7 +28,10 @@ type CachedPayload = {
 const POSITIONS_TTL_MS = 90_000;
 const TLE_STALE_MS = 30 * 60 * 1000;
 const PRIORITY = /ISS|ZARYA|STARLINK|HUBBLE|GPS|GOES|NOAA|IRNSS|NAVIC|CARTOSAT|INSAT/i;
-const HAS_POSTGRES = /^(postgresql|postgres):\/\//.test(process.env.DATABASE_URL ?? "");
+const HAS_POSTGRES = hasUsablePostgresUrl();
+const SEED_SLUG_BY_NORAD = new Map(
+  SEED_SATELLITES.filter((sat) => sat.noradId).map((sat) => [sat.noradId!, sat.slug])
+);
 
 const globalCache = globalThis as unknown as {
   __orbytMaxTrackerCache?: CachedPayload | null;
@@ -68,6 +74,7 @@ function computePositions(tle: string, limit: number): TrackerPosition[] {
     if (!pos) continue;
     positions.push({
       name: rec.name,
+      slug: SEED_SLUG_BY_NORAD.get(rec.norad),
       lat: pos.lat,
       lon: pos.lon,
       alt: pos.altKm,

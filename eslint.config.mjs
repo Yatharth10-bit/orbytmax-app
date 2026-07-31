@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "legacy/**",
+    "public/black-hole-explorer/**",
     "orbital-app/**",
     "mobile/.expo/**",
     "mobile/dist*/**",

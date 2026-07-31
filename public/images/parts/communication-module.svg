@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite communication module">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff6e7"/><stop offset="1" stop-color="#edf6f6"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".18"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g filter="url(#s)" transform="translate(176 72)">
+    <rect x="78" y="48" width="136" height="128" rx="22" fill="#fff2df" stroke="#394350" stroke-width="6"/>
+    <rect x="110" y="80" width="72" height="22" rx="8" fill="#587386"/>
+    <rect x="110" y="118" width="72" height="22" rx="8" fill="#f28c38"/>
+    <path d="M78 112H18M214 112h60" stroke="#394350" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="18" cy="112" r="16" fill="#dff1f5" stroke="#394350" stroke-width="5"/>
+    <circle cx="274" cy="112" r="16" fill="#dff1f5" stroke="#394350" stroke-width="5"/>
+  </g>
+  <g fill="none" stroke="#f28c38" stroke-width="4" opacity=".65"><path d="M460 118c48 28 48 96 0 124"/><path d="M488 96c74 46 74 124 0 170"/><path d="M180 118c-48 28-48 96 0 124"/><path d="M152 96c-74 46-74 124 0 170"/></g>
+</svg>

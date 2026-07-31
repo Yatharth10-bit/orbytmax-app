@@ -1,4 +1,4 @@
-import * as satellite from "satellite.js";
+import * as satellite from "@/lib/satellite-js-pure";
 
 export type GeodeticPosition = {
   lat: number;

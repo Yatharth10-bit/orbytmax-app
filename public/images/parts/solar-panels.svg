@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Solar panels satellite part">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff8eb"/><stop offset=".55" stop-color="#eaf5f7"/><stop offset="1" stop-color="#ffe6c3"/></linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#16395d"/><stop offset="1" stop-color="#4eb7d8"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".18"/></filter>
+  </defs>
+  <rect width="640" height="360" rx="32" fill="url(#sky)"/>
+  <g opacity=".28" stroke="#7a8b99" stroke-width="1"><path d="M64 96h512M64 164h512M64 232h512M128 54v252M256 54v252M384 54v252M512 54v252"/></g>
+  <g filter="url(#shadow)" transform="translate(62 86)">
+    <rect x="0" y="72" width="208" height="84" rx="10" fill="url(#panel)" stroke="#193044" stroke-width="5"/>
+    <rect x="308" y="72" width="208" height="84" rx="10" fill="url(#panel)" stroke="#193044" stroke-width="5"/>
+    <g stroke="#bfeeff" stroke-width="2" opacity=".72">
+      <path d="M52 74v80M104 74v80M156 74v80M360 74v80M412 74v80M464 74v80"/>
+      <path d="M4 114h202M312 114h202"/>
+    </g>
+    <rect x="222" y="48" width="72" height="132" rx="18" fill="#f7efe0" stroke="#394350" stroke-width="5"/>
+    <circle cx="258" cy="114" r="24" fill="#f3b568" stroke="#394350" stroke-width="5"/>
+    <path d="M208 114h28M280 114h28" stroke="#394350" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <circle cx="522" cy="74" r="18" fill="#f28c38" opacity=".9"/>
+</svg>

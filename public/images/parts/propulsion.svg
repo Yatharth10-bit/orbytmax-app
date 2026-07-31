@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite propulsion thruster">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff6e8"/><stop offset="1" stop-color="#edf6f3"/></linearGradient><linearGradient id="flame" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#fff1a6"/><stop offset=".5" stop-color="#ff9838"/><stop offset="1" stop-color="#ff5c35"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".2"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g filter="url(#s)" transform="translate(122 88)">
+    <rect x="120" y="48" width="156" height="104" rx="24" fill="#fff2df" stroke="#394350" stroke-width="6"/>
+    <path d="M276 72h88l36 28-36 28h-88z" fill="#c9d9df" stroke="#394350" stroke-width="6"/>
+    <path d="M400 80c66 5 110 20 132 48-42 8-88 6-132-8z" fill="url(#flame)" opacity=".9"/>
+    <path d="M120 74H34v52h86" fill="#8fb4c3" stroke="#394350" stroke-width="6"/>
+    <circle cx="168" cy="100" r="18" fill="#f28c38"/>
+    <path d="M198 70v60M226 70v60" stroke="#587386" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <g opacity=".4" stroke="#587386" stroke-width="2"><path d="M74 256h138M92 282h88M444 70h92"/></g>
+</svg>

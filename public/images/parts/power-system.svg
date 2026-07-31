@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite power system">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff8ea"/><stop offset="1" stop-color="#e8f5f1"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".18"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g filter="url(#s)" transform="translate(126 62)">
+    <rect x="118" y="52" width="152" height="156" rx="24" fill="#fff2df" stroke="#394350" stroke-width="6"/>
+    <rect x="150" y="86" width="88" height="88" rx="14" fill="#233044"/>
+    <path d="M194 106l-24 38h24l-16 32 44-48h-25l18-22z" fill="#f9b34f"/>
+    <rect x="0" y="90" width="96" height="80" rx="10" fill="#235176" stroke="#394350" stroke-width="6"/>
+    <rect x="292" y="90" width="96" height="80" rx="10" fill="#235176" stroke="#394350" stroke-width="6"/>
+    <path d="M96 130h54M238 130h54" stroke="#394350" stroke-width="8" stroke-linecap="round"/>
+    <g stroke="#a9e8ff" opacity=".7"><path d="M24 92v76M48 92v76M72 92v76M316 92v76M340 92v76M364 92v76"/></g>
+  </g>
+  <circle cx="532" cy="86" r="18" fill="#f28c38" opacity=".8"/>
+</svg>

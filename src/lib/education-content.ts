@@ -12,6 +12,7 @@ export type MissionEntry = {
   model?: {
     fallbackType: string;
     attribution: string;
+    modelUrl?: string;
   };
 };
 
@@ -21,6 +22,7 @@ export type SatellitePart = {
   summary: string;
   why: string;
   signal: string;
+  imageUrl: string;
 };
 
 export type QuizQuestion = {
@@ -45,11 +47,12 @@ function toMissionEntry(slug: string): MissionEntry {
     orbitType: sat.orbitType,
     facts: sat.facts,
     model: sat.model
-      ? {
-          fallbackType: sat.model.fallbackType,
-          attribution: sat.model.attribution,
-        }
-      : undefined,
+        ? {
+            fallbackType: sat.model.fallbackType,
+            attribution: sat.model.attribution,
+            modelUrl: sat.model.modelUrl,
+          }
+        : undefined,
   };
 }
 
@@ -81,6 +84,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Wide panels convert sunlight into electricity for the spacecraft.",
     why: "Without steady power, radios, sensors, heaters, and computers shut down quickly.",
     signal: "Power maker",
+    imageUrl: "/images/parts-real/solar-panels.jpg",
   },
   {
     slug: "antennas",
@@ -88,6 +92,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Antennas send commands, science data, images, and health updates between space and Earth.",
     why: "A mission is only useful if it can talk to ground stations or other satellites.",
     signal: "Space radio",
+    imageUrl: "/images/parts-real/antennas.jpg",
   },
   {
     slug: "payload",
@@ -95,6 +100,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "The payload is the mission tool: a camera, radar, telescope, transponder, or experiment.",
     why: "It is the reason the satellite was launched.",
     signal: "Mission tool",
+    imageUrl: "/images/parts-real/payload.jpg",
   },
   {
     slug: "propulsion",
@@ -102,6 +108,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Thrusters nudge the spacecraft into the right orbit and help avoid collisions.",
     why: "Small burns can keep a satellite useful for years.",
     signal: "Tiny pushes",
+    imageUrl: "/images/parts-real/propulsion.jpg",
   },
   {
     slug: "power-system",
@@ -109,6 +116,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Power electronics move energy from panels and batteries to each subsystem.",
     why: "It keeps the spacecraft balanced between charging, storing, and spending energy.",
     signal: "Energy traffic",
+    imageUrl: "/images/parts-real/power-system.jpg",
   },
   {
     slug: "thermal-control",
@@ -116,6 +124,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Blankets, radiators, coatings, and heaters keep parts from getting too hot or too cold.",
     why: "Spacecraft swing between harsh sunlight and deep shadow every orbit.",
     signal: "Temperature guard",
+    imageUrl: "/images/parts-real/thermal-control.jpg",
   },
   {
     slug: "attitude-control",
@@ -123,6 +132,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Reaction wheels, star trackers, gyros, and sensors point the spacecraft accurately.",
     why: "A camera, antenna, or solar panel only works well when pointed correctly.",
     signal: "Pointing brain",
+    imageUrl: "/images/parts-real/attitude-control.jpg",
   },
   {
     slug: "communication-module",
@@ -130,6 +140,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Radios, amplifiers, and modems translate onboard data into signals ground stations can read.",
     why: "It turns a satellite into a useful member of a larger mission network.",
     signal: "Data link",
+    imageUrl: "/images/parts-real/communication-module.jpg",
   },
   {
     slug: "sensors",
@@ -137,6 +148,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Sensors measure Earth, stars, temperature, motion, radiation, or spacecraft health.",
     why: "They give the spacecraft awareness and collect the mission data.",
     signal: "Space senses",
+    imageUrl: "/images/parts-real/sensors.jpg",
   },
   {
     slug: "onboard-computer",
@@ -144,6 +156,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "The flight computer runs commands, checks health, stores data, and handles safe mode.",
     why: "It keeps the satellite operating when it is out of contact with Earth.",
     signal: "Flight brain",
+    imageUrl: "/images/parts-real/onboard-computer.jpg",
   },
   {
     slug: "structure",
@@ -151,6 +164,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "The frame holds everything together through launch vibration and space operations.",
     why: "Every subsystem needs a strong, lightweight place to mount.",
     signal: "Space frame",
+    imageUrl: "/images/parts-real/structure.jpg",
   },
   {
     slug: "batteries",
@@ -158,6 +172,7 @@ export const SATELLITE_PARTS: SatellitePart[] = [
     summary: "Batteries store energy so the satellite can run during eclipse or peak demand.",
     why: "They bridge the dark side of each orbit when solar panels cannot see the Sun.",
     signal: "Night power",
+    imageUrl: "/images/parts-real/batteries.jpg",
   },
 ];
 

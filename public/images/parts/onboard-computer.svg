@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite onboard computer">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff8eb"/><stop offset="1" stop-color="#e8f5f1"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".18"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g filter="url(#s)" transform="translate(164 62)">
+    <rect x="64" y="48" width="184" height="156" rx="24" fill="#263140" stroke="#394350" stroke-width="6"/>
+    <rect x="98" y="82" width="116" height="88" rx="14" fill="#eaf7f8" stroke="#78a8b6" stroke-width="5"/>
+    <path d="M122 112h68M122 136h44" stroke="#587386" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="198" cy="136" r="10" fill="#f28c38"/>
+    <g stroke="#394350" stroke-width="6"><path d="M64 78H16M64 112H16M64 146H16M64 180H16M248 78h48M248 112h48M248 146h48M248 180h48"/></g>
+  </g>
+  <g opacity=".45" fill="#f28c38"><circle cx="102" cy="86" r="8"/><circle cx="528" cy="260" r="10"/></g>
+</svg>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NeoLinkButton, SectionHeader } from "@/components/neo-ui";
 import { SatelliteModelPanel } from "@/components/satellite-model-panel";
+import { hasUsablePostgresUrl } from "@/lib/database-status";
 import { getSatelliteBySlug, serializeSatellite } from "@/lib/satellite-service";
 import { prisma } from "@/lib/prisma";
 import { SEED_SATELLITES } from "@/lib/seed-catalog";
@@ -34,12 +35,20 @@ export default async function SatelliteDetailPage({ params }: Props) {
 
   let related: { id: string; name: string; slug: string }[] = [];
   if (sat.relatedSlugs?.length) {
-    try {
-      related = await prisma.satellite.findMany({
-        where: { slug: { in: sat.relatedSlugs } },
-        select: { id: true, name: true, slug: true },
-      });
-    } catch {
+    if (hasUsablePostgresUrl()) {
+      try {
+        related = await prisma.satellite.findMany({
+          where: { slug: { in: sat.relatedSlugs } },
+          select: { id: true, name: true, slug: true },
+        });
+      } catch {
+        related = SEED_SATELLITES.filter((item) => sat.relatedSlugs.includes(item.slug)).map((item) => ({
+          id: item.slug,
+          name: item.name,
+          slug: item.slug,
+        }));
+      }
+    } else {
       related = SEED_SATELLITES.filter((item) => sat.relatedSlugs.includes(item.slug)).map((item) => ({
         id: item.slug,
         name: item.name,
@@ -55,7 +64,7 @@ export default async function SatelliteDetailPage({ params }: Props) {
           Home
         </Link>
         <span>/</span>
-        <Link href="/satellites" className="hover:text-[var(--text)]">
+        <Link href="/explore#satellites" className="hover:text-[var(--text)]">
           Satellites
         </Link>
         <span>/</span>
@@ -79,8 +88,8 @@ export default async function SatelliteDetailPage({ params }: Props) {
       </header>
 
       <section className="mt-10" aria-labelledby="model-title">
-        <p className="neo-eyebrow">3D Model</p>
-        <h2 id="model-title" className="mt-4 text-3xl font-extrabold uppercase leading-none">
+        <p className="neo-eyebrow">Inspect</p>
+        <h2 id="model-title" className="mt-4 text-3xl font-medium leading-tight">
           Inspect spacecraft
         </h2>
         <div className="mt-5">
@@ -94,7 +103,7 @@ export default async function SatelliteDetailPage({ params }: Props) {
       </section>
 
       <section className="mt-12 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="card bg-[#e9f7ff]">
+        <div className="card mission-detail-card mission-file-card">
           <span className="sticker-tag">Overview</span>
           <p className="mt-4 text-[var(--muted)]">{sat.description}</p>
           <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
@@ -106,7 +115,7 @@ export default async function SatelliteDetailPage({ params }: Props) {
               ["NORAD", sat.noradId || "TBD"],
               ["Altitude", sat.altitude || (sat.position ? `${sat.position.altKm.toFixed(0)} km` : "TBD")],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-[14px] border-2 border-[var(--border)] bg-white p-3">
+              <div key={label} className="mission-info-cell">
                 <dt className="font-mono text-[0.68rem] font-bold uppercase text-[var(--muted)]">{label}</dt>
                 <dd className="mt-1 break-words font-bold">{value}</dd>
               </div>
@@ -114,11 +123,11 @@ export default async function SatelliteDetailPage({ params }: Props) {
           </dl>
         </div>
 
-        <div className="card bg-[#fff0f7]">
+        <div className="card mission-detail-card mission-facts-card">
           <span className="sticker-tag">Facts</span>
           <ul className="mt-4 grid gap-3 text-[var(--muted)]">
             {(sat.facts as string[]).map((fact) => (
-              <li key={fact} className="rounded-[14px] border-2 border-[var(--border)] bg-white p-3">
+              <li key={fact} className="mission-fact-item">
                 {fact}
               </li>
             ))}

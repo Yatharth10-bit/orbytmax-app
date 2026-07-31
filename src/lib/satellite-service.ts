@@ -3,10 +3,11 @@ import { FALLBACK_TLE } from "@/lib/fallback-tle";
 import { SEED_SATELLITES, type SeedSatellite } from "@/lib/seed-catalog";
 import { fetchLiveTle, parseTleRecords, selectMixedTle } from "@/lib/tle";
 import { categorizeByName, predictPasses, propagateFromTle, type PassPrediction } from "@/lib/satellite-math";
+import { hasUsablePostgresUrl } from "@/lib/database-status";
 
 const TLE_MEMORY_TTL_MS = 30 * 60 * 1000;
 const PASS_CACHE_TTL_MS = 5 * 60 * 1000;
-const HAS_POSTGRES = /^(postgresql|postgres):\/\//.test(process.env.DATABASE_URL ?? "");
+const HAS_POSTGRES = hasUsablePostgresUrl();
 
 type TleFeedResult = { tle: string; source: string; updated: string };
 type PassCacheEntry = { expiresAt: number; passes: PassPrediction[] };
@@ -52,7 +53,7 @@ function seedToSatellite(sat: SeedSatellite) {
       ? {
           id: `${sat.slug}-model`,
           satelliteId: sat.slug,
-          modelUrl: null,
+          modelUrl: sat.model.modelUrl ?? null,
           embedUid: sat.model.embedUid ?? null,
           fallbackType: sat.model.fallbackType,
           attribution: sat.model.attribution,
@@ -93,7 +94,7 @@ function seedFeedItems(offset = 0, limit = 12) {
 }
 
 export async function getSatellitesList(category?: string, options: { preferEmbedded?: boolean } = {}) {
-  if (options.preferEmbedded) return seedSatellites(category);
+  if (options.preferEmbedded || !HAS_POSTGRES) return seedSatellites(category);
   const where = category && category !== "all" ? { category } : {};
   try {
     const satellites = await prisma.satellite.findMany({
@@ -109,13 +110,48 @@ export async function getSatellitesList(category?: string, options: { preferEmbe
 
 export async function getSatelliteBySlug(slug: string, options: { preferEmbedded?: boolean } = {}) {
   const seed = SEED_SATELLITES.find((sat) => sat.slug === slug);
-  if (options.preferEmbedded) return seed ? seedToSatellite(seed) : null;
+  if (options.preferEmbedded || !HAS_POSTGRES) return seed ? seedToSatellite(seed) : null;
   try {
     const satellite = await prisma.satellite.findUnique({
       where: { slug },
       include: { model: true },
     });
-    if (satellite) return satellite;
+    if (satellite) {
+      const seedModel = seed?.model;
+      if (seedModel && !satellite.model) {
+        return {
+          ...satellite,
+          model: {
+            id: `${satellite.id}-catalog-model`,
+            satelliteId: satellite.id,
+            modelUrl: seedModel.modelUrl ?? null,
+            embedUid: seedModel.embedUid ?? null,
+            fallbackType: seedModel.fallbackType,
+            attribution: seedModel.attribution,
+            sourceUrl: seedModel.sourceUrl ?? null,
+            license: null,
+            commercialUseAllowed: seedModel.commercialUseAllowed ?? false,
+            modificationAllowed: seedModel.modificationAllowed ?? false,
+            partsJson: null,
+          },
+        };
+      }
+      if (seedModel && satellite.model && !satellite.model.modelUrl && seedModel.modelUrl) {
+        return {
+          ...satellite,
+          model: {
+            ...satellite.model,
+            modelUrl: seedModel.modelUrl,
+            fallbackType: seedModel.fallbackType,
+            attribution: seedModel.attribution,
+            sourceUrl: seedModel.sourceUrl ?? satellite.model.sourceUrl,
+            commercialUseAllowed: seedModel.commercialUseAllowed ?? satellite.model.commercialUseAllowed,
+            modificationAllowed: seedModel.modificationAllowed ?? satellite.model.modificationAllowed,
+          },
+        };
+      }
+      return satellite;
+    }
   } catch {
     /* Public mission pages can still render from embedded catalog data. */
   }
@@ -125,6 +161,16 @@ export async function getSatelliteBySlug(slug: string, options: { preferEmbedded
 export async function searchSatellites(q: string) {
   const query = q.trim();
   if (!query) return [];
+  if (!HAS_POSTGRES) {
+    const needle = query.toLowerCase();
+    return seedSatellites().filter(
+      (sat) =>
+        sat.name.toLowerCase().includes(needle) ||
+        sat.slug.includes(needle) ||
+        sat.agency.toLowerCase().includes(needle) ||
+        sat.noradId?.includes(needle)
+    );
+  }
   try {
     const results = await prisma.satellite.findMany({
       where: {
@@ -199,6 +245,7 @@ function refreshTleFeedInBackground() {
 }
 
 export async function getFeedItems(offset = 0, limit = 12) {
+  if (!HAS_POSTGRES) return seedFeedItems(offset, limit);
   let items;
   try {
     items = await prisma.feedItem.findMany({
@@ -214,8 +261,9 @@ export async function getFeedItems(offset = 0, limit = 12) {
   return rotated.slice(0, limit);
 }
 
-export async function computePasses(lat: number, lng: number) {
-  const key = `${lat.toFixed(2)}:${lng.toFixed(2)}`;
+export async function computePasses(lat: number, lng: number, days = 1) {
+  const safeDays = Math.min(Math.max(Math.round(days), 1), 7);
+  const key = `${lat.toFixed(2)}:${lng.toFixed(2)}:${safeDays}`;
   const cache = (serviceCache.__orbytMaxPassCache ??= new Map());
   const requests = (serviceCache.__orbytMaxPassRequests ??= new Map());
   const cached = cache.get(key);
@@ -223,7 +271,7 @@ export async function computePasses(lat: number, lng: number) {
   const pending = requests.get(key);
   if (pending) return pending;
 
-  const request = computePassesUncached(lat, lng)
+  const request = computePassesUncached(lat, lng, safeDays)
     .then((passes) => {
       cache.set(key, { passes, expiresAt: Date.now() + PASS_CACHE_TTL_MS });
       return passes;
@@ -233,7 +281,7 @@ export async function computePasses(lat: number, lng: number) {
   return request;
 }
 
-async function computePassesUncached(lat: number, lng: number) {
+async function computePassesUncached(lat: number, lng: number, days: number) {
   const satellites = seedSatellites().filter((sat) => sat.noradId || sat.tleLine1);
 
   const tleFeed = await getTleFeed().catch(() => null);
@@ -256,15 +304,15 @@ async function computePassesUncached(lat: number, lng: number) {
       tle2 = record?.tle2 ?? tle2;
     }
     if (!tle1 || !tle2) continue;
-    const satPasses = predictPasses(sat.name, tle1, tle2, lat, lng, 12);
+    const satPasses = predictPasses(sat.name, tle1, tle2, lat, lng, days * 24);
     for (const p of satPasses) {
       passes.push({ ...p, slug: sat.slug, noradId: sat.noradId ?? undefined, category: sat.category });
     }
-    if (passes.length >= 24) break;
+    if (passes.length >= 20 + days * 12) break;
   }
 
   passes.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
-  return passes.slice(0, 20);
+  return passes.slice(0, Math.min(72, 18 + days * 8));
 }
 
 export function serializeSatellite(sat: NonNullable<Awaited<ReturnType<typeof getSatelliteBySlug>>>) {

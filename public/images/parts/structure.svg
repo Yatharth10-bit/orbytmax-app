@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite structure frame">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff7e8"/><stop offset="1" stop-color="#edf6fb"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".18"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g filter="url(#s)" transform="translate(178 58)" fill="none" stroke-linejoin="round">
+    <path d="M60 72l118-44 118 44v124l-118 50L60 196z" fill="#f8efe0" stroke="#394350" stroke-width="6"/>
+    <path d="M60 72l118 50 118-50M178 122v124M60 196l118-74 118 74" stroke="#587386" stroke-width="5"/>
+    <path d="M102 88v90M254 88v90M112 210l132-154" stroke="#f28c38" stroke-width="5" opacity=".75"/>
+    <circle cx="178" cy="122" r="18" fill="#f28c38" stroke="#394350" stroke-width="5"/>
+  </g>
+  <path d="M84 266h120M436 92h112" stroke="#748696" stroke-width="3" opacity=".35"/>
+</svg>

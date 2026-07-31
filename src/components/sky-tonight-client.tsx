@@ -7,9 +7,11 @@ import { EmptyState, ErrorState, LoadingSkeleton, SectionHeader } from "@/compon
 type Pass = {
   name: string;
   slug?: string;
+  noradId?: string;
   category: string;
   start: string;
   maxTime: string;
+  end?: string;
   maxElevation: number;
   durationSec?: number;
   brightness?: string;
@@ -24,10 +26,15 @@ type GeocodeResult = {
 };
 
 type LastRequest =
-  | { mode: "city"; city: string }
-  | { mode: "coords"; label: string; lat: number; lng: number };
+  | { mode: "city"; city: string; days: number }
+  | { mode: "coords"; label: string; lat: number; lng: number; days: number };
 
 const QUICK_CITIES = ["Bengaluru", "Mumbai", "Delhi", "Hyderabad", "Chennai", "New York", "London", "Tokyo"];
+const PASS_WINDOWS = [
+  { days: 1, label: "Tonight" },
+  { days: 3, label: "3 days" },
+  { days: 7, label: "7 days" },
+];
 
 function formatPassTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -53,6 +60,53 @@ function formatDuration(seconds?: number) {
   return `${minutes} min`;
 }
 
+function trackerHrefFor(pass: Pass) {
+  const params = new URLSearchParams({ follow: "1" });
+  if (pass.slug) params.set("satellite", pass.slug);
+  if (pass.noradId) params.set("norad", pass.noradId);
+  if (!pass.slug && !pass.noradId) params.set("name", pass.name);
+  return `/tracker?${params.toString()}`;
+}
+
+function formatCalendarDate(value: string) {
+  return new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function calendarTextFor(pass: Pass) {
+  const start = new Date(new Date(pass.maxTime).getTime() - 5 * 60 * 1000).toISOString();
+  const end = pass.end || new Date(new Date(pass.maxTime).getTime() + 10 * 60 * 1000).toISOString();
+  const title = `Watch ${pass.name}`;
+  const description = [
+    `Satellite: ${pass.name}`,
+    pass.noradId ? `NORAD: ${pass.noradId}` : "",
+    `Visibility: ${pass.brightness || `${pass.maxElevation} degree peak`}`,
+    `Direction: ${pass.direction || "Best overhead arc"}`,
+    "Open OrbytMax Sky Tonight and Live Tracker before the pass.",
+  ]
+    .filter(Boolean)
+    .join("\\n");
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//OrbytMax//Satellite Pass Reminder//EN",
+    "BEGIN:VEVENT",
+    `UID:${pass.name.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}@orbytmax`,
+    `DTSTAMP:${formatCalendarDate(new Date().toISOString())}`,
+    `DTSTART:${formatCalendarDate(start)}`,
+    `DTEND:${formatCalendarDate(end)}`,
+    `SUMMARY:${title}`,
+    `DESCRIPTION:${description}`,
+    "BEGIN:VALARM",
+    "TRIGGER:-PT10M",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${title} starts soon`,
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+}
+
 export function SkyTonightClient() {
   const [city, setCity] = useState("Bengaluru");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -64,12 +118,27 @@ export function SkyTonightClient() {
   const [error, setError] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
   const [passesLoading, setPassesLoading] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [passWindowDays, setPassWindowDays] = useState(1);
   const [lastRequest, setLastRequest] = useState<LastRequest | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const cacheRef = useRef<Map<string, GeocodeResult>>(new Map());
 
   const loading = lookupLoading || passesLoading;
+
+  const downloadReminder = useCallback((pass: Pass) => {
+    const blob = new Blob([calendarTextFor(pass)], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${pass.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-pass.ics`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setStatus(`Calendar reminder downloaded for ${pass.name}.`);
+  }, []);
 
   const resolveCity = useCallback(async (value: string, quiet = false) => {
     const query = value.trim();
@@ -112,9 +181,10 @@ export function SkyTonightClient() {
   const fetchPasses = useCallback(async (location: GeocodeResult, request: LastRequest) => {
     setPassesLoading(true);
     setError("");
-    setStatus(`Finding visible passes near ${location.label}...`);
+    const windowLabel = request.days === 1 ? "tonight" : `the next ${request.days} days`;
+    setStatus(`Finding visible passes near ${location.label} for ${windowLabel}...`);
     try {
-      const res = await fetch(`/api/passes?lat=${location.lat}&lng=${location.lng}`);
+      const res = await fetch(`/api/passes?lat=${location.lat}&lng=${location.lng}&days=${request.days}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not fetch satellite passes.");
       const nextPasses = (data.passes || []) as Pass[];
@@ -123,8 +193,8 @@ export function SkyTonightClient() {
       setLastRequest(request);
       setStatus(
         nextPasses.length
-          ? `Found ${nextPasses.length} visible pass${nextPasses.length === 1 ? "" : "es"} near ${location.label}.`
-          : `No visible satellites found near ${location.label} in the next 18 hours.`
+          ? `Found ${nextPasses.length} visible pass${nextPasses.length === 1 ? "" : "es"} near ${location.label} for ${windowLabel}.`
+          : `No visible satellites found near ${location.label} for ${windowLabel}.`
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not calculate passes for this location.";
@@ -140,9 +210,9 @@ export function SkyTonightClient() {
     async (value = city) => {
       const match = await resolveCity(value);
       if (!match) return;
-      await fetchPasses(match, { mode: "city", city: value.trim() });
+      await fetchPasses(match, { mode: "city", city: value.trim(), days: passWindowDays });
     },
-    [city, fetchPasses, resolveCity]
+    [city, fetchPasses, passWindowDays, resolveCity]
   );
 
   const searchByCoords = useCallback(async () => {
@@ -153,8 +223,40 @@ export function SkyTonightClient() {
       return;
     }
     const label = city.trim() || "Manual location";
-    await fetchPasses({ label, lat, lng, source: "manual" }, { mode: "coords", label, lat, lng });
-  }, [city, fetchPasses, manualLat, manualLng]);
+    await fetchPasses({ label, lat, lng, source: "manual" }, { mode: "coords", label, lat, lng, days: passWindowDays });
+  }, [city, fetchPasses, manualLat, manualLng, passWindowDays]);
+
+  const useBrowserLocation = useCallback(async () => {
+    if (!("geolocation" in navigator)) {
+      setError("This browser cannot share location. Try searching by city or use Advanced location.");
+      return;
+    }
+
+    setLocationLoading(true);
+    setError("");
+    setStatus("Waiting for your browser location...");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const label = "Your location";
+        setCity(label);
+        setManualLat(lat.toFixed(4));
+        setManualLng(lng.toFixed(4));
+        setLocationLoading(false);
+        void fetchPasses(
+          { label, lat, lng, source: "browser" },
+          { mode: "coords", label, lat, lng, days: passWindowDays }
+        );
+      },
+      () => {
+        setLocationLoading(false);
+        setError("Location permission was not available. Search by city or enter coordinates instead.");
+        setStatus("Location permission was not available. Search by city or enter coordinates instead.");
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
+    );
+  }, [fetchPasses, passWindowDays]);
 
   const retry = useCallback(async () => {
     if (!lastRequest) {
@@ -162,14 +264,15 @@ export function SkyTonightClient() {
       return;
     }
     if (lastRequest.mode === "city") {
-      await searchByCity(lastRequest.city);
+      const match = await resolveCity(lastRequest.city);
+      if (match) await fetchPasses(match, lastRequest);
     } else {
       await fetchPasses(
         { label: lastRequest.label, lat: lastRequest.lat, lng: lastRequest.lng, source: "manual" },
         lastRequest
       );
     }
-  }, [city, fetchPasses, lastRequest, searchByCity]);
+  }, [city, fetchPasses, lastRequest, resolveCity, searchByCity]);
 
   useEffect(() => {
     const tick = window.setInterval(() => setNow(Date.now()), 60000);
@@ -212,7 +315,7 @@ export function SkyTonightClient() {
       >
         <label className="grid gap-2 text-sm font-extrabold" htmlFor="city-search">
           City
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <input
               id="city-search"
               type="search"
@@ -227,6 +330,14 @@ export function SkyTonightClient() {
             />
             <button type="submit" className="btn-primary" disabled={loading || city.trim().length < 2}>
               {loading ? "Searching..." : "Find passes"}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={useBrowserLocation}
+              disabled={loading || locationLoading}
+            >
+              {locationLoading ? "Locating..." : "Use my location"}
             </button>
           </div>
         </label>
@@ -244,6 +355,20 @@ export function SkyTonightClient() {
               disabled={loading}
             >
               {item}
+            </button>
+          ))}
+        </div>
+
+        <div className="sky-window-picker" role="group" aria-label="Pass prediction window">
+          {PASS_WINDOWS.map((windowOption) => (
+            <button
+              key={windowOption.days}
+              type="button"
+              className={passWindowDays === windowOption.days ? "is-active" : ""}
+              onClick={() => setPassWindowDays(windowOption.days)}
+              disabled={loading}
+            >
+              {windowOption.label}
             </button>
           ))}
         </div>
@@ -325,6 +450,24 @@ export function SkyTonightClient() {
         ))}
       </div>
 
+      <section className="sky-observation-guide mt-6" aria-label="Satellite watching guide">
+        <article>
+          <span>Step 1</span>
+          <h2>Pick a bright pass</h2>
+          <p>Start with Brightest or ISS, then choose the pass with the highest elevation.</p>
+        </article>
+        <article>
+          <span>Step 2</span>
+          <h2>Go outside early</h2>
+          <p>Be ready 5 minutes before the max time and look toward the listed direction.</p>
+        </article>
+        <article>
+          <span>Step 3</span>
+          <h2>Follow it live</h2>
+          <p>Use Follow / View to open the map on that exact satellite while it moves overhead.</p>
+        </article>
+      </section>
+
       <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {passesLoading &&
           [1, 2, 3].map((item) => <LoadingSkeleton key={item} label="Calculating visible pass" />)}
@@ -371,9 +514,12 @@ export function SkyTonightClient() {
                   <dd>{formatDuration(pass.durationSec)}</dd>
                 </div>
               </dl>
-              <Link href={pass.slug ? `/satellite/${pass.slug}` : "/tracker"} className="btn-primary mt-5 w-full">
+              <Link href={trackerHrefFor(pass)} className="btn-primary mt-5 w-full">
                 Follow / View
               </Link>
+              <button type="button" className="btn-secondary mt-3 w-full" onClick={() => downloadReminder(pass)}>
+                Add reminder
+              </button>
             </article>
           ))}
       </div>

@@ -5,6 +5,7 @@ import { computePasses } from "@/lib/satellite-service";
 const schema = z.object({
   lat: z.coerce.number().min(-90).max(90),
   lng: z.coerce.number().min(-180).max(180),
+  days: z.coerce.number().int().min(1).max(7).default(1),
 });
 
 export async function GET(request: Request) {
@@ -12,9 +13,9 @@ export async function GET(request: Request) {
   const parsed = schema.safeParse(params);
   if (!parsed.success) return jsonError("Invalid lat/lng");
   try {
-    const passes = await computePasses(parsed.data.lat, parsed.data.lng);
+    const passes = await computePasses(parsed.data.lat, parsed.data.lng, parsed.data.days);
     return jsonOk(
-      { passes, location: { lat: parsed.data.lat, lng: parsed.data.lng } },
+      { passes, location: { lat: parsed.data.lat, lng: parsed.data.lng }, days: parsed.data.days },
       { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=600" } }
     );
   } catch (e) {

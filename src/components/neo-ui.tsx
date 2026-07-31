@@ -31,7 +31,11 @@ export function NeoLinkButton({
   variant?: "primary" | "secondary";
 }) {
   return (
-    <Link href={href} className={variant === "primary" ? "neo-button" : "neo-button neo-button-secondary"}>
+    <Link
+      href={href}
+      prefetch={href === "/tracker" || href === "/black-hole-explorer" ? false : undefined}
+      className={variant === "primary" ? "neo-button" : "neo-button neo-button-secondary"}
+    >
       {children}
     </Link>
   );
@@ -52,15 +56,29 @@ export function SatelliteCard({
   meta?: string;
   featured?: boolean;
 }) {
+  const chips = meta
+    ? meta
+        .split("/")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 2)
+    : [];
+
   return (
     <Link href={href} className={`satellite-card ${featured ? "is-featured" : ""}`}>
       <span className="sticker-tag">{category}</span>
-      <div className="satellite-cutout" aria-hidden="true">
-        <span />
-      </div>
       <h2>{title}</h2>
       {description && <p>{description}</p>}
-      {meta && <small>{meta}</small>}
+      {chips.length > 0 && (
+        <small className="card-chip-row">
+          {chips.map((chip) => (
+            <span key={chip} className="card-chip">
+              {chip}
+            </span>
+          ))}
+        </small>
+      )}
+      <span className="card-text-link">View details</span>
     </Link>
   );
 }

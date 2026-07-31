@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Satellite camera payload">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff8ec"/><stop offset=".7" stop-color="#edf6fb"/></linearGradient><radialGradient id="lens"><stop stop-color="#9ff0ff"/><stop offset=".45" stop-color="#27527b"/><stop offset="1" stop-color="#07111f"/></radialGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2a3340" flood-opacity=".18"/></filter></defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)"/>
+  <g opacity=".18" stroke="#708291"><path d="M82 98h476M82 180h476M82 262h476M160 58v250M320 58v250M480 58v250"/></g>
+  <g filter="url(#s)" transform="translate(158 62)">
+    <rect x="76" y="54" width="180" height="168" rx="28" fill="#fff2df" stroke="#394350" stroke-width="6"/>
+    <rect x="102" y="86" width="128" height="104" rx="22" fill="#263140"/>
+    <circle cx="166" cy="138" r="44" fill="url(#lens)" stroke="#d8f7ff" stroke-width="7"/>
+    <circle cx="151" cy="120" r="12" fill="#fff" opacity=".72"/>
+    <path d="M256 108h68v60h-68z" fill="#f28c38" stroke="#394350" stroke-width="6"/>
+    <path d="M76 108H8v60h68" fill="#8fb4c3" stroke="#394350" stroke-width="6"/>
+  </g>
+  <path d="M454 92l78-30M454 132l100-4M454 172l78 30" stroke="#f28c38" stroke-width="4" stroke-linecap="round" opacity=".65"/>
+</svg>

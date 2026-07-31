@@ -1,8 +1,13 @@
 import { jsonOk } from "@/lib/api";
+import { hasUsablePostgresUrl } from "@/lib/database-status";
 import { prisma } from "@/lib/prisma";
 import { EDUCATION_PAGES, QUIZ_SEED } from "@/lib/seed-catalog";
 
 export async function GET() {
+  if (!hasUsablePostgresUrl()) {
+    return jsonOk({ pages: EDUCATION_PAGES, quizzes: [QUIZ_SEED] });
+  }
+
   try {
     const pages = await prisma.educationPage.findMany({ orderBy: { title: "asc" } });
     const quizzes = await prisma.quiz.findMany({
