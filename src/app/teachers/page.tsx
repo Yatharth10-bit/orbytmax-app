@@ -21,6 +21,12 @@ const classroomFlows = [
   },
 ];
 
+const rolloutSteps = [
+  "Pick one city and one visible pass for the whole class.",
+  "Have students open the same mission page, then compare orbit facts.",
+  "End with the orbit quiz so the teacher can turn curiosity into recall.",
+];
+
 export default function TeachersPage() {
   return (
     <div className="teacher-page mx-auto max-w-6xl px-4 py-10 sm:py-12">
@@ -56,6 +62,25 @@ export default function TeachersPage() {
           </Link>
           <Link href="/explore#learn" className="btn-secondary">
             Read student guides
+          </Link>
+        </div>
+      </section>
+
+      <section className="teacher-checklist mt-8" aria-label="Teacher launch plan">
+        <div>
+          <h2>Use one teacher to reach a whole class</h2>
+          <ul>
+            {rolloutSteps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="teacher-actions">
+          <Link href="/whats-overhead" className="btn-primary">
+            Start with a pass
+          </Link>
+          <Link href="/education/quiz" className="btn-secondary">
+            Open quiz
           </Link>
         </div>
       </section>

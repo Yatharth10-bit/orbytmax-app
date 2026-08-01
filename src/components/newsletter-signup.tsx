@@ -87,7 +87,7 @@ export function NewsletterSignup({ compact = false, source }: { compact?: boolea
         {message}
       </p>
       <p className="newsletter-consent">
-        By joining, you agree to receive {NEWSLETTER.name}. Read the{" "}
+        By joining, you agree to receive {NEWSLETTER.name}. If you are under 18, ask a parent or teacher first. Read the{" "}
         <Link href="/privacy">privacy note</Link>.
       </p>
     </form>

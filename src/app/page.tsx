@@ -12,9 +12,9 @@ const features = [
     href: "/tracker",
   },
   {
-    title: "See what is visible tonight",
+    title: "See what's overhead tonight",
     desc: "Pass times, direction, and elevation for your location.",
-    href: "/sky-tonight",
+    href: "/whats-overhead",
   },
   {
     title: "Explore ISRO & global missions",
@@ -70,8 +70,8 @@ export default function HomePage() {
                 action={
                   <div className="grid gap-3 sm:flex">
                     <NeoLinkButton href="/tracker">Open tracker</NeoLinkButton>
-                    <NeoLinkButton href="/sky-tonight" variant="secondary">
-                      Sky tonight
+                    <NeoLinkButton href="/whats-overhead" variant="secondary">
+                      What&apos;s overhead
                     </NeoLinkButton>
                     <NeoLinkButton href="/explore#learn" variant="secondary">
                       Student guides

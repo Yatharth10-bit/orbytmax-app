@@ -6,7 +6,7 @@ const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://orbytmax.com";
 const staticRoutes = [
   "",
   "/tracker",
-  "/sky-tonight",
+  "/whats-overhead",
   "/explore",
   "/education/isro",
   "/education/global",

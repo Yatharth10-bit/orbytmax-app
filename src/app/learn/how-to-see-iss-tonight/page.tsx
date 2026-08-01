@@ -19,7 +19,7 @@ export default function IssTonightGuidePage() {
         <section>
           <h2>1. Search your city</h2>
           <p>
-            Open Sky Tonight, enter your city, and choose Tonight, 3 days, or 7 days. A high elevation pass is usually
+            Open What&apos;s Overhead, enter your city, and choose Tonight, 3 days, or 7 days. A high elevation pass is usually
             easier to see than one near the horizon.
           </p>
         </section>
@@ -40,7 +40,7 @@ export default function IssTonightGuidePage() {
       </div>
 
       <div className="learn-cta">
-        <Link href="/sky-tonight" className="btn-primary">
+        <Link href="/whats-overhead" className="btn-primary">
           Find visible passes
         </Link>
         <Link href="/satellite/iss" className="btn-secondary">

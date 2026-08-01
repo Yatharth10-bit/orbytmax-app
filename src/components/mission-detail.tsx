@@ -34,7 +34,7 @@ export function MissionDetail({
           action={
             <div className="grid gap-3 sm:flex">
               <NeoLinkButton href={`/satellite/${mission.slug}`}>Open tracker detail</NeoLinkButton>
-              <NeoLinkButton href="/sky-tonight" variant="secondary">
+              <NeoLinkButton href="/whats-overhead" variant="secondary">
                 Find passes
               </NeoLinkButton>
             </div>

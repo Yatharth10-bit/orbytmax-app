@@ -1,0 +1,44 @@
+<svg width="4096" height="1180" viewBox="0 0 4096 1180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pageBg" x1="0" y1="0" x2="4096" y2="1180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8DF"/>
+      <stop offset="0.52" stop-color="#F6EFDD"/>
+      <stop offset="1" stop-color="#FFF8DF"/>
+    </linearGradient>
+    <radialGradient id="markGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(585 624) rotate(90) scale(520)">
+      <stop stop-color="#E87F31" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#E87F31" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="markOuter" x1="221" y1="290" x2="934" y2="872" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#587386"/>
+      <stop offset="0.28" stop-color="#8FA77B"/>
+      <stop offset="0.62" stop-color="#FFBF6F"/>
+      <stop offset="1" stop-color="#E87F31"/>
+    </linearGradient>
+    <linearGradient id="markInner" x1="345" y1="384" x2="818" y2="772" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8FA77B"/>
+      <stop offset="0.45" stop-color="#E9A651"/>
+      <stop offset="1" stop-color="#FFBF6F"/>
+    </linearGradient>
+    <linearGradient id="markBlueShade" x1="355" y1="746" x2="633" y2="548" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#587386"/>
+      <stop offset="1" stop-color="#587386" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="4096" height="1180" fill="url(#pageBg)"/>
+  <circle cx="585" cy="624" r="520" fill="url(#markGlow)"/>
+
+  <g>
+    <rect x="218" y="255" width="745" height="745" rx="181" fill="url(#markOuter)"/>
+    <rect x="248" y="285" width="685" height="685" rx="154" fill="#FFF8DF" fill-opacity="0.54"/>
+    <rect x="335" y="382" width="503" height="503" rx="142" fill="url(#markInner)"/>
+    <path d="M337 704C434 839 520 877 656 862C741 853 805 814 838 779V884H334L337 704Z" fill="url(#markBlueShade)"/>
+    <ellipse cx="562" cy="632" rx="310" ry="126" transform="rotate(-24 562 632)" stroke="#242832" stroke-width="21"/>
+    <circle cx="493" cy="639" r="82" fill="#242832"/>
+    <rect x="663" y="416" width="101" height="139" rx="50" fill="#FFFAF2"/>
+    <circle cx="815" cy="505" r="45" fill="#FFFAF2"/>
+  </g>
+
+  <text x="1224" y="720" font-family="Space Grotesk, Inter, Arial, sans-serif" font-size="486" font-weight="800" letter-spacing="39" fill="#242832">OrbytMax</text>
+</svg>

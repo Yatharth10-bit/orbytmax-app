@@ -78,7 +78,7 @@ export default async function SatelliteDetailPage({ params }: Props) {
           copy={sat.shortDescription || sat.description}
           action={
             <div className="grid gap-3 sm:flex">
-              <NeoLinkButton href="/sky-tonight">Find passes</NeoLinkButton>
+              <NeoLinkButton href="/whats-overhead">Find passes</NeoLinkButton>
               <NeoLinkButton href="/tracker" variant="secondary">
                 Open tracker
               </NeoLinkButton>

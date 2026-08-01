@@ -27,6 +27,10 @@ export default function PrivacyPage() {
           include basic spam protection.
         </p>
         <p>
+          If a student is under 18, they should join only with a parent, guardian, or teacher&apos;s permission. OrbytMax
+          does not ask students to create accounts for the learning tools.
+        </p>
+        <p>
           Every production newsletter should include an unsubscribe link from the email provider. You can leave the
           list anytime.
         </p>
@@ -37,4 +41,3 @@ export default function PrivacyPage() {
     </div>
   );
 }
-

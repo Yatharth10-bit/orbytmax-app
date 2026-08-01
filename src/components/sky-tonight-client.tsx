@@ -81,7 +81,7 @@ function calendarTextFor(pass: Pass) {
     pass.noradId ? `NORAD: ${pass.noradId}` : "",
     `Visibility: ${pass.brightness || `${pass.maxElevation} degree peak`}`,
     `Direction: ${pass.direction || "Best overhead arc"}`,
-    "Open OrbytMax Sky Tonight and Live Tracker before the pass.",
+    "Open OrbytMax What's Overhead and Live Tracker before the pass.",
   ]
     .filter(Boolean)
     .join("\\n");
@@ -301,8 +301,8 @@ export function SkyTonightClient() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
       <SectionHeader
-        eyebrow="Sky Tonight"
-        title="What can I see tonight?"
+        eyebrow="What's Overhead"
+        title="What is overhead tonight?"
         copy="Search by city to estimate visible satellite passes. Exact coordinates are still available when you want precision."
       />
 
