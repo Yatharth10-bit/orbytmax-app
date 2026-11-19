@@ -1,6 +1,10 @@
 # OrbytMax
 
-OrbytMax is a Next.js 16 satellite tracker and education app. It includes a live satellite map, city-based visible pass lookup, satellite and mission detail pages, ISRO/global mission libraries, a satellite parts guide, and an interactive orbit basics quiz.
+Explore a satellite on the map, find its next approximate visible pass over a city, or follow its mission into a short orbit lesson.
+
+![OrbytMax mission library](docs/portfolio-preview.webp)
+
+[Read the portfolio case study](https://yatharth10-bit.github.io/Yatharth-Portfolio/orbytmax.html)
 
 ## Local Setup
 
