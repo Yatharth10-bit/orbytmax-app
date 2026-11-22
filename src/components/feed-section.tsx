@@ -1,4 +1,5 @@
 "use client";
+import { appFetch } from "@/lib/app-fetch";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -16,7 +17,7 @@ type FeedItem = {
 };
 
 async function requestFeed(refresh = false) {
-  const res = await fetch(refresh ? "/api/feed/refresh" : "/api/feed", {
+  const res = await appFetch(refresh ? "/api/feed/refresh" : "/api/feed", {
     method: refresh ? "POST" : "GET",
   });
   const data = await res.json();

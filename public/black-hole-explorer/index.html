@@ -8,6 +8,8 @@
 <link rel="icon" href="data:,"/>
 <title>OrbytMax - Black Hole Explorer</title>
 <link rel="stylesheet" href="css/style.css"/>
+<link rel="stylesheet" href="css/theme.css"/>
+<script src="js/theme.js" defer></script>
 <script type="importmap">
 {
   "imports": {
@@ -18,6 +20,7 @@
 </script>
 </head>
 <body>
+<button id="theme-toggle" class="theme-switch" type="button" aria-label="Toggle light and dark theme">? Theme</button>
 <a class="return-bar" href="/" aria-label="Return to OrbytMax main website">
   <span>ORBYTMAX MAIN WEBSITE</span>
   <strong>RETURN</strong>
@@ -34,7 +37,7 @@
 
   <header class="title-block">
     <h1 class="title">ORBYTMAX</h1>
-    <div class="subtitle">SUPERMASSIVE BLACK HOLE · 1.0 × 10⁸ M☉</div>
+    <div class="subtitle">SUPERMASSIVE BLACK HOLE � 1.0 x 108 M?</div>
     <div class="tag">SCHWARZSCHILD METRIC // NULL-GEODESIC RAYTRACING</div>
   </header>
 
@@ -69,10 +72,10 @@
       <button class="btn active" id="btnHud" aria-pressed="true">HUD</button>
     </div>
     <button class="btn wide" id="btnSound" aria-pressed="false">SOUND: OFF</button>
-    <div class="deck-hint">1-4 VIEWS · C CINE · R ORBIT · P PARAMS · M SOUND · H HUD</div>
+    <div class="deck-hint">1-4 VIEWS � C CINE � R ORBIT � P PARAMS � M SOUND � H HUD</div>
   </nav>
 
-  <div id="hint" aria-hidden="true">DRAG ORBIT · SCROLL/PINCH ZOOM · C CINEMATIC · M SOUND · 1-4 VIEWS · P PARAMS · H HUD</div>
+  <div id="hint" aria-hidden="true">DRAG ORBIT � SCROLL/PINCH ZOOM � C CINEMATIC � M SOUND � 1-4 VIEWS � P PARAMS � H HUD</div>
 </div>
 
 <div id="params" class="hidden" role="dialog" aria-label="Raytracing parameters">

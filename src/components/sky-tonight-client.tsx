@@ -1,4 +1,5 @@
 "use client";
+import { appFetch } from "@/lib/app-fetch";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -154,7 +155,7 @@ export function SkyTonightClient() {
     setLookupLoading(true);
     if (!quiet) setStatus(`Resolving ${query}...`);
     try {
-      const res = await fetch(`/api/geocode?query=${encodeURIComponent(query)}`);
+      const res = await appFetch(`/api/geocode?query=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "City lookup failed.");
       const match = data.location as GeocodeResult;
@@ -184,7 +185,7 @@ export function SkyTonightClient() {
     const windowLabel = request.days === 1 ? "tonight" : `the next ${request.days} days`;
     setStatus(`Finding visible passes near ${location.label} for ${windowLabel}...`);
     try {
-      const res = await fetch(`/api/passes?lat=${location.lat}&lng=${location.lng}&days=${request.days}`);
+      const res = await appFetch(`/api/passes?lat=${location.lat}&lng=${location.lng}&days=${request.days}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not fetch satellite passes.");
       const nextPasses = (data.passes || []) as Pass[];

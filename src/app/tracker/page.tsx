@@ -11,14 +11,14 @@ export default function TrackerPage() {
     <div className="mx-auto max-w-6xl px-4 py-10">
       <SectionHeader
         eyebrow="Tracker"
-        title="Live satellite map"
-        copy="Refresh live orbital data, follow one object, and keep the 3D globe usable on small screens."
+        title="Predicted satellite map"
+        copy="Calculated positions, not live telemetry. Check the orbital record epoch before observing. Embedded fallback data is for demonstration only."
       />
       <section className="tracker-trust-grid mt-8" aria-label="Tracker data quality notes">
         <article>
           <span>01</span>
-          <h2>Live orbital data</h2>
-          <p>Positions are calculated from TLE-style orbital records and refreshed inside the tracker.</p>
+          <h2>Predictions, not telemetry</h2>
+          <p>A calculation timestamp is not the age of the underlying orbit. Stale orbital records can produce inaccurate predictions.</p>
         </article>
         <article>
           <span>02</span>

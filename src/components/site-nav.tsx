@@ -2,72 +2,71 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 
 const links = [
   { href: "/", label: "Home" },
   { href: "/tracker", label: "Tracker" },
-  { href: "/whats-overhead", label: "What's Overhead" },
+  { href: "/whats-overhead", label: "Sky Tonight" },
   { href: "/explore", label: "Explore" },
+  { href: "/missions", label: "Missions" },
   { href: "/black-hole-explorer", label: "Black Hole Explorer" },
 ];
 
 export function SiteNav() {
   const pathname = usePathname();
-  const [utc, setUtc] = useState("");
-
-  useEffect(() => {
-    const update = () => {
-      setUtc(
-        new Intl.DateTimeFormat(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "UTC",
-          timeZoneName: "short",
-        }).format(new Date())
-      );
-    };
-    update();
-    const timer = window.setInterval(update, 60000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const { data: session } = useSession();
 
   return (
-    <header className="site-nav">
-      <div className="site-nav-inner">
-        <Link href="/" className="brand-wordmark site-brand">
-          <span className="site-brand-mark">
-            <span />
-          </span>
-          <span className="site-brand-text">OrbytMax</span>
+    <header className="sticky top-0 z-50 border-b-2 border-[var(--border)] bg-[var(--paper)]">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <Link href="/" className="brand-wordmark flex items-center gap-2 font-extrabold text-[var(--text)]">
+          <span className="inline-block h-4 w-4 rounded-full border-2 border-[var(--border)] bg-[var(--accent-2)]" />
+          OrbytMax
         </Link>
-        <nav className="site-nav-links" aria-label="Main">
+        <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              prefetch={link.href === "/tracker" || link.href === "/black-hole-explorer" ? false : undefined}
-              className={`site-nav-link ${pathname === link.href || (link.href === "/explore" && ["/satellites", "/education", "/learn"].includes(pathname)) ? "is-active" : ""}`}
+              prefetch={link.href === "/tracker" ? false : undefined}
+              className={`rounded-full border-2 px-3 py-1.5 text-sm font-bold transition-colors ${
+                pathname === link.href
+                  ? "border-[var(--border)] bg-[var(--accent-2)] text-[var(--text)]"
+                  : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"
+              }`}
             >
               {link.label}
             </Link>
           ))}
         </nav>
-        <div className="site-nav-actions">
-          <span className="mission-clock" aria-label="Current UTC mission clock">
-            {utc || "--:-- UTC"}
-          </span>
-          <Link href="/newsletter" className="site-newsletter-cta text-sm">
-            The Downlink
-          </Link>
+        <div className="flex items-center gap-2">
+          {session?.user ? (
+            <>
+              <Link href="/dashboard" className="btn-secondary hidden text-sm sm:inline-flex">
+                Dashboard
+              </Link>
+              <button type="button" onClick={() => signOut()} className="btn-secondary text-sm">
+                Sign out
+              </button>
+            </>
+          ) : (
+            <Link href="/auth/login" className="btn-primary text-sm">
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
-      <nav className="site-nav-mobile" aria-label="Mobile">
+      <nav className="flex gap-2 overflow-x-auto border-t-2 border-[var(--border)] px-4 py-2 md:hidden" aria-label="Mobile">
         {links.map((link) => (
           <Link
             key={link.href}
             href={link.href}
-            className={`site-nav-link ${pathname === link.href || (link.href === "/explore" && ["/satellites", "/education", "/learn"].includes(pathname)) ? "is-active" : ""}`}
+            className={`shrink-0 rounded-full border-2 px-3 py-1 text-xs font-bold ${
+              pathname === link.href
+                ? "border-[var(--border)] bg-[var(--accent-2)] text-[var(--text)]"
+                : "border-transparent text-[var(--muted)]"
+            }`}
           >
             {link.label}
           </Link>

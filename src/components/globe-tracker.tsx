@@ -1,4 +1,5 @@
 "use client";
+import { appFetch } from "@/lib/app-fetch";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -106,7 +107,7 @@ function formatUpdated(value?: string) {
 
 async function fetchPositions(limit: number, refresh = false, signal?: AbortSignal) {
   const suffix = refresh ? "&refresh=1" : "";
-  const res = await fetch(`/api/tracker/positions?limit=${limit}${suffix}`, { signal });
+  const res = await appFetch(`/api/tracker/positions?limit=${limit}${suffix}`, { signal });
   const data = (await res.json()) as PositionPayload & { error?: string };
   if (!res.ok) throw new Error(data.error || "Failed to load positions");
   return {
@@ -139,7 +140,7 @@ const SatelliteListItem = memo(function SatelliteListItem({
         <span className="tracker-list-emoji">{categoryEmoji(sat.category)}</span>
         <span className="block font-bold">{sat.name}</span>
         <small>
-          {sat.category} · #{sat.norad}
+          {sat.category} � #{sat.norad}
         </small>
       </button>
       <div className="tracker-list-actions">
@@ -836,11 +837,11 @@ export function GlobeTracker() {
               <dl>
                 <div>
                   <dt>Latitude</dt>
-                  <dd>{activeGeo.lat.toFixed(4)}°</dd>
+                  <dd>{activeGeo.lat.toFixed(4)}�</dd>
                 </div>
                 <div>
                   <dt>Longitude</dt>
-                  <dd>{activeGeo.lon.toFixed(4)}°</dd>
+                  <dd>{activeGeo.lon.toFixed(4)}�</dd>
                 </div>
                 <div>
                   <dt>Altitude</dt>

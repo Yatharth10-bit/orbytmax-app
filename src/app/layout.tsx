@@ -1,25 +1,18 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import { SiteNav } from "@/components/site-nav";
 import { Providers } from "@/components/providers";
-import { SpaceDoodles } from "@/components/space-doodles";
 import "./globals.css";
+import "./learning.css";
+import "./missions.css";
 
-const inter = Inter({
-  variable: "--font-body",
-  subsets: ["latin"],
-});
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const plexMono = IBM_Plex_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const display = localFont({ src: "./fonts/Syne.ttf", variable: "--font-display", weight: "400 800" });
+const mono = localFont({
+  src: [
+    { path: "./fonts/SpaceMono-Regular.ttf", weight: "400" },
+    { path: "./fonts/SpaceMono-Bold.ttf", weight: "700" },
+  ],
+  variable: "--font-terminal",
 });
 
 export const metadata: Metadata = {
@@ -93,7 +86,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   };
 
   return (
-    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} ${plexMono.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${display.variable} ${mono.variable}`}>
       <body className="starfield font-sans antialiased">
         <script
           type="application/ld+json"
@@ -101,10 +94,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <Providers>
           <SiteNav />
-          <SpaceDoodles />
           <main className="min-h-[calc(100vh-4rem)]">{children}</main>
-          <footer className="border-t-2 border-[var(--border)] bg-[var(--paper)] py-8 text-center font-mono text-xs font-bold text-[var(--muted)]">
-            OrbytMax / Space tracker and education / by Yatharth
+          <footer className="site-footer">
+            <div className="site-footer-inner">
+              <div>
+                <strong>OrbytMax</strong>
+                <span>Space, made easier to explore.</span>
+              </div>
+              <nav aria-label="Footer">
+                <a href="/teachers">Teachers</a>
+                <a href="/newsletter">The Downlink</a>
+                <a href="/privacy">Privacy</a>
+              </nav>
+              <small>Built by Yatharth</small>
+            </div>
           </footer>
         </Providers>
       </body>

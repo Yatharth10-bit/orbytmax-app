@@ -50,9 +50,15 @@ function setMemCache(payload: Omit<CachedPayload, "at">) {
 }
 
 async function readTleText(force = false): Promise<{ tle: string; source: string; updated: string }> {
+  if (HAS_POSTGRES) {
+    try {
+      const row = await prisma.tleCache.findUnique({ where: { id: "global" } });
+      if (row && parseTleRecords(row.rawTle).length) return { tle: selectMixedTle(row.rawTle, 200, force), source: `${row.source} (cached; check orbital epoch)`, updated: row.updatedAt.toISOString() };
+    } catch { /* Use a clearly labelled demonstration if storage is unavailable. */ }
+  }
   return {
     tle: selectMixedTle(FALLBACK_TLE, 32, force),
-    source: "embedded fallback (refreshing)",
+    source: "embedded fallback � demonstration only; not for observing",
     updated: new Date().toISOString(),
   };
 }
