@@ -4,7 +4,7 @@ Explore a satellite on the map, find its next approximate visible pass over a ci
 
 ![OrbytMax mission library](docs/portfolio-preview.webp)
 
-[Read the portfolio case study](https://yatharth10-bit.github.io/Yatharth-Portfolio/orbytmax.html)
+[Read the portfolio case study](https://yatharth-srivastav.github.io/Yatharth-Portfolio/orbytmax.html)
 
 ## Local Setup
 
